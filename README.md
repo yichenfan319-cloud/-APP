@@ -67,24 +67,6 @@
 
 ---
 
-##  项目结构
-WuyiKebiao/
-├── app/src/main/java/com/wuyi/kebiao/
-│ ├── SplashActivity.java # 启动页（AI生成）
-│ ├── MainActivity.java # 主容器（AI生成）
-│ ├── HomeFragment.java # 核心逻辑（AI生成，约800行）
-│ ├── ProfileFragment.java # 个人页面（AI生成）
-│ ├── WeekViewActivity.java # 周课表（AI生成）
-│ └── model/
-│ └── Course.java # 数据模型（AI生成）
-├── app/src/main/res/ # 布局资源（AI生成）
-├── app/src/main/assets/www/
-│ └── index.html # 前端页面（AI生成）
-├── app/build.gradle # 构建配置（AI辅助）
-└── README.md # 本文档（AI生成）
-
-
----
 
 ##  快速开始
 
