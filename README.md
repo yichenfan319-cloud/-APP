@@ -1,0 +1,100 @@
+# 武夷学院课表助手 - Wuyi University Timetable Assistant
+
+>  一款基于 Android 的教务系统课表查询应用，支持自动登录、课表解析、天气查询等功能。
+
+---
+
+##  AI 生成声明
+
+**本项目由 AI 辅助生成**
+
+本项目是在 [DeepSeek AI] [Kimi AI] [GPT AI] 的辅助下完成的 Android 应用开发项目。从需求分析、架构设计到代码实现、调试优化，AI 全程参与了开发过程。
+
+### AI 贡献范围
+
+| 阶段 | AI 贡献 | 人工参与 |
+|------|---------|----------|
+| 需求分析 |  功能规划、技术选型 | 需求提出 |
+| 架构设计 |  模块划分、流程设计 | 方案确认 |
+| 代码生成 |  Java/XML/HTML/JS 代码 | 参数调优 |
+| 调试优化 |  错误分析、解决方案 | 测试验证 |
+| 文档编写 |  技术报告、使用说明 | 内容审核 |
+
+### 技术亮点（AI 辅助实现）
+
+-  **智能登录**：JS 注入实现 Angular 表单自动提交
+-  **数据解析**：DOM 遍历算法提取课程信息
+-  **异步处理**：OkHttp + Handler 实现非阻塞网络请求
+
+### AI 工具信息
+
+| 项目 | 信息 |
+|------|------|
+| AI 模型 | DeepSeek,Kimi，GPT |
+| 开发工具 | Android Studio |
+| 编程语言 | Java / HTML / JavaScript |
+| 代码量 | 约 2500 行 |
+
+---
+
+##  项目简介
+
+本项目是一款专为武夷学院学生设计的课表查询 Android 应用，解决教务系统无移动端、重复登录等问题。
+
+### 核心功能
+
+-  **自动登录**：一次输入，后续自动登录
+-  **记住密码**：本地加密存储，安全便捷
+-  **今日课表**：当天课程一目了然
+-  **本周课表**：表格形式展示整周课程
+-  **实时天气**：显示本地天气信息
+-  **每日寄语**：励志语句每日更新
+-  **系统公告**：接收服务器推送通知
+-  **版本更新**：自动检查新版本
+
+---
+
+## 🛠️ 技术栈
+
+| 技术 | 用途 | 版本 |
+|------|------|------|
+| Java | 后端逻辑 | JDK 17 |
+| Android SDK | 移动开发 | API 34 |
+| OkHttp | 网络请求 | 4.12.0 |
+| Gson | JSON解析 | 2.10.1 |
+| WebView | 页面展示 | 原生 |
+| HTML/CSS/JS | 前端界面 | ES6 |
+
+---
+
+##  项目结构
+WuyiKebiao/
+├── app/src/main/java/com/wuyi/kebiao/
+│ ├── SplashActivity.java # 启动页（AI生成）
+│ ├── MainActivity.java # 主容器（AI生成）
+│ ├── HomeFragment.java # 核心逻辑（AI生成，约800行）
+│ ├── ProfileFragment.java # 个人页面（AI生成）
+│ ├── WeekViewActivity.java # 周课表（AI生成）
+│ └── model/
+│ └── Course.java # 数据模型（AI生成）
+├── app/src/main/res/ # 布局资源（AI生成）
+├── app/src/main/assets/www/
+│ └── index.html # 前端页面（AI生成）
+├── app/build.gradle # 构建配置（AI辅助）
+└── README.md # 本文档（AI生成）
+
+
+---
+
+##  快速开始
+
+### 环境要求
+
+- Android Studio Hedgehog | 2023.1.1+
+- JDK 17+
+- Android SDK API 34+
+
+### 克隆项目
+
+```bash
+git clone https://github.com/yichenfan-cloud/WuyiKebiao.git
