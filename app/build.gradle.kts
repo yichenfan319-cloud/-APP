@@ -10,8 +10,8 @@ android {
         applicationId = "com.wuyi.kebiao"
         minSdk = 21
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.3.2-beta"
+        versionCode = 10
+        versionName = "1.3.6-beta"
     }
 
     buildTypes {

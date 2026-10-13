@@ -1,7 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Base.Theme.Kipkip2" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+    <!--
+      应用主题（夜间 / 深色）。
+      ⚠ 这里的 style 名必须与 values/themes.xml 完全一致：Base.Theme.WuyiKebiao。
+      历史上此文件名为 Base.Theme.Kipkip2（工程改名前的模板残留），
+      与亮色主题名对不上，导致整个文件从未生效过。
+    -->
+
+    <style name="Base.Theme.WuyiKebiao" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- 只覆盖需要变化的属性；未列出的自动沿用亮色定义 -->
+        <item name="colorPrimary">@color/brand_primary</item>
+        <item name="colorOnPrimary">@color/brand_primary_on</item>
+
+        <item name="colorSurfaceScreen">@color/surface_screen</item>
+        <item name="colorSurfaceCard">@color/surface_card</item>
+        <item name="colorDivider">@color/divider</item>
+        <item name="colorTextPrimary">@color/text_primary</item>
+        <item name="colorTextHint">@color/text_hint</item>
+
+        <!-- 夜间状态栏压暗，图标改用浅色 -->
+        <item name="android:statusBarColor">@color/surface_screen</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

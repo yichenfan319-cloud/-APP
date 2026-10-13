@@ -1,5 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+      ============================================================
+      设计变量（亮色）
+      ============================================================
+      values-night/colors.xml 里放同名变量即可自动切换夜间配色，
+      布局和 Java 代码只引用变量名，不再出现硬编码色值。
+      ============================================================
+    -->
+
+    <!-- 基础色 -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- 品牌色（校徽蓝）——顶部信息栏、按钮主色 -->
+    <color name="brand_primary">#FF034EA1</color>
+    <color name="brand_primary_on">#FFFFFFFF</color>
+
+    <!-- 表面层：screen 是整页底色，card 是浮起来的卡片/列表底色 -->
+    <color name="surface_screen">#FFF0F2F5</color>
+    <color name="surface_card">#FFFFFFFF</color>
+    <color name="divider">#FFE0E0E0</color>
+
+    <!-- 文字 -->
+    <color name="text_primary">#FF1A2C3E</color>
+    <color name="text_hint">#FF999999</color>
+
+    <!-- 课程格子：空位底色与其边框 -->
+    <color name="grid_empty">#FFFAFAFA</color>
+    <color name="grid_stroke">#FFE0E0E0</color>
+
+    <!--
+      课程格子配色：按课程名 hash 取模分配，同一门课颜色恒定。
+      这两个数组成对使用，长度必须一致（WeekViewActivity 里断言依赖这一点）。
+      注意：这些是浅色底 + 深色字，在夜间模式下刻意保持浅底，
+      以保证格子内文字始终可读，不要给它们加 values-night 版本。
+    -->
+    <color name="course_soft_0">#FFE3F2FD</color>
+    <color name="course_soft_1">#FFE8F5E9</color>
+    <color name="course_soft_2">#FFFFF9C4</color>
+    <color name="course_soft_3">#FFF3E5F5</color>
+    <color name="course_soft_4">#FFFFE0B2</color>
+    <color name="course_soft_5">#FFFCE4EC</color>
+    <color name="course_soft_6">#FFE0F7FA</color>
+
+    <color name="course_text_0">#FF1565C0</color>
+    <color name="course_text_1">#FF2E7D32</color>
+    <color name="course_text_2">#FFF57F17</color>
+    <color name="course_text_3">#FF6A1B9A</color>
+    <color name="course_text_4">#FFEF6C00</color>
+    <color name="course_text_5">#FFC2185B</color>
+    <color name="course_text_6">#FF00838F</color>
 </resources>

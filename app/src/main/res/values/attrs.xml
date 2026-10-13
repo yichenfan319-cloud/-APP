@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      ============================================================
+      自定义主题属性声明
+      ============================================================
+      想让布局里能用 ?attr/colorXxx 引用，必须在这里先声明；
+      然后在 values/themes.xml 与 values-night/themes.xml 里分别赋值。
+      这样同一个布局文件在日夜两种模式下自动取到不同颜色，
+      布局本身不需要写任何 <item> 或两套文件。
+
+      命名约定：color 前缀 + 语义名（不是具体颜色名），
+      例如 colorTextPrimary 而不是 colorDarkGray。
+      ============================================================
+    -->
+
+    <!-- 整页底色 -->
+    <attr name="colorSurfaceScreen" format="color" />
+    <!-- 浮起来的卡片/列表底色 -->
+    <attr name="colorSurfaceCard" format="color" />
+    <!-- 分割线 -->
+    <attr name="colorDivider" format="color" />
+    <!-- 主要文字 -->
+    <attr name="colorTextPrimary" format="color" />
+    <!-- 次要/提示文字 -->
+    <attr name="colorTextHint" format="color" />
+</resources>

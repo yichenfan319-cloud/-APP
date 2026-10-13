@@ -19,7 +19,6 @@ import android.webkit.WebViewClient;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -52,28 +51,34 @@ public class HomeFragment extends Fragment {
     private static final String WEATHER_API_URL = "http://47.105.75.20:8000/api/weather";
     private static final String MOTIVATION_API_URL = "http://47.105.75.20:8002/api/weather/tip";
 
-    private WebView webView;      // 前台显示用的 WebView
-    private WebView crawlerView;  // 后台爬虫 WebView
+    // 重试机制常量
+    private static final int MAX_RETRY = 1;      // 最大重试次数（只重试1次）
+    private static final int RETRY_DELAY_MS = 2000;  // 重试延迟2秒
+
+    private WebView webView;          // 前台展示WebView
+    private WebView crawlerView;      // 后台爬虫WebView
     private SharedPreferences prefs;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Gson gson = new Gson();
     private OkHttpClient client;
 
-    // 信息栏组件
+    // UI组件
     private TextView tvGreeting;
     private TextView tvWeather;
     private ImageView ivWeatherIcon;
     private LinearLayout layoutWeather;
-
-    // 提示栏组件
     private ImageView ivCharacter;
     private TextView tvMotivation;
 
+    // 登录状态
     private String pendingUser = null;
     private String pendingPass = null;
     private boolean isCrawling = false;
     private boolean hasInjectedLogin = false;
     private Runnable timeoutRunnable = null;
+
+    // 重试计数器
+    private int retryCount = 0;
 
     @Nullable
     @Override
@@ -81,90 +86,55 @@ public class HomeFragment extends Fragment {
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_home, container, false);
 
-        // 初始化 SharedPreferences
         prefs = requireActivity().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-
-        // 初始化 OkHttp
         client = new OkHttpClient();
-
-        // 获取 WebView
         webView = view.findViewById(R.id.webView);
 
-        // 初始化主界面 UI（问候语 + 天气 + 提示栏）
         initHomeUI(view);
 
-        // 创建隐藏的爬虫 WebView
         crawlerView = new WebView(requireContext());
         crawlerView.setLayoutParams(new ViewGroup.LayoutParams(0, 0));
         crawlerView.setVisibility(View.GONE);
         ((ViewGroup) view).addView(crawlerView);
 
-        // 设置前台 WebView
         setupWebView(webView);
         webView.loadUrl("file:///android_asset/www/index.html");
 
-        // 设置后台爬虫 WebView
         setupCrawlerView();
 
-        // 自动登录（如果有保存的账号密码）
         autoLoginIfCredentialsExist();
 
         return view;
     }
 
-    /**
-     * 初始化主界面 UI 组件
-     */
     private void initHomeUI(View view) {
-        // 信息栏
         tvGreeting = view.findViewById(R.id.tv_greeting);
         tvWeather = view.findViewById(R.id.tv_weather);
         ivWeatherIcon = view.findViewById(R.id.iv_weather_icon);
         layoutWeather = view.findViewById(R.id.layout_weather);
-
-        // 提示栏
         ivCharacter = view.findViewById(R.id.iv_character);
         tvMotivation = view.findViewById(R.id.tv_motivation);
 
-        // 设置问候语
         updateGreeting();
-
-        // 获取天气
         fetchWeather();
-
-        // 获取提示句子
         fetchMotivation();
 
-        // 点击天气刷新
         layoutWeather.setOnClickListener(v -> fetchWeather());
     }
 
-    /**
-     * 更新问候语（根据当前时间）
-     */
     private void updateGreeting() {
         int hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
         String greeting;
-        if (hour >= 5 && hour < 11) {
-            greeting = "迎接新的一天";
-        } else if (hour >= 11 && hour < 13) {
-            greeting = "睡个午觉吧";
-        } else if (hour >= 13 && hour < 18) {
-            greeting = "下午好";
-        } else if (hour >= 18 && hour < 22) {
-            greeting = "祝你好梦";
-        } else {
-            greeting = "你也是夜猫子？";
-        }
+        if (hour >= 5 && hour < 11) greeting = "开启新的一天";
+        else if (hour >= 11 && hour < 13) greeting = "午睡啦";
+        else if (hour >= 13 && hour < 18) greeting = "精力充沛";
+        else if (hour >= 18 && hour < 22) greeting = "可以放松啦";
+        else greeting = "难道你是夜猫子";
         tvGreeting.setText(greeting);
     }
 
-    /**
-     * 获取天气信息
-     */
     private void fetchWeather() {
         Request request = new Request.Builder().url(WEATHER_API_URL).get().build();
-
         client.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
@@ -173,7 +143,6 @@ public class HomeFragment extends Fragment {
                     ivWeatherIcon.setImageResource(R.drawable.ic_weather_default);
                 });
             }
-
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                 try {
@@ -182,90 +151,46 @@ public class HomeFragment extends Fragment {
                     String weather = json.optString("weather", "未知");
                     String temp = json.optString("temp", "");
                     String city = json.optString("city", "");
-
-                    int iconRes = getWeatherIcon(weather);
+                    int iconRes = weather.contains("晴") ? R.drawable.ic_weather_sunny :
+                            weather.contains("雨") ? R.drawable.ic_weather_rainy : R.drawable.ic_weather_default;
                     String weatherText = city + " " + weather + " " + temp;
-
                     requireActivity().runOnUiThread(() -> {
                         tvWeather.setText(weatherText.trim());
                         ivWeatherIcon.setImageResource(iconRes);
                     });
-
-                    // 根据天气更新二次元形象
                     updateCharacterImage(weather);
-
                 } catch (Exception e) {
-                    requireActivity().runOnUiThread(() -> {
-                        tvWeather.setText("天气解析失败");
-                        ivWeatherIcon.setImageResource(R.drawable.ic_weather_default);
-                    });
+                    requireActivity().runOnUiThread(() -> tvWeather.setText("天气解析失败"));
                 }
             }
         });
     }
 
-    /**
-     * 根据天气类型返回对应图标
-     */
-    private int getWeatherIcon(String weather) {
-        if (weather.contains("晴")) {
-            return R.drawable.ic_weather_sunny;
-        } else if (weather.contains("雨")) {
-            return R.drawable.ic_weather_rainy;
-        } else if (weather.contains("阴") || weather.contains("云")) {
-            return R.drawable.ic_weather_default;
-        } else {
-            return R.drawable.ic_weather_default;
-        }
-    }
-
-    /**
-     * 根据天气更新二次元形象图片
-     */
     private void updateCharacterImage(String weather) {
         int resId;
-        if (weather.contains("晴")) {
-            resId = R.drawable.character_sunny;
-        } else if (weather.contains("雨")) {
-            resId = R.drawable.character_rainy;
-        } else if (weather.contains("阴") || weather.contains("云")) {
-            resId = R.drawable.character_cloudy;
-        } else {
-            resId = R.drawable.character_default;
-        }
-        requireActivity().runOnUiThread(() -> {
-            ivCharacter.setImageResource(resId);
-        });
+        if (weather.contains("晴")) resId = R.drawable.character_sunny;
+        else if (weather.contains("雨")) resId = R.drawable.character_rainy;
+        else if (weather.contains("阴") || weather.contains("云")) resId = R.drawable.character_cloudy;
+        else resId = R.drawable.character_default;
+        requireActivity().runOnUiThread(() -> ivCharacter.setImageResource(resId));
     }
 
-    /**
-     * 获取提示句子（语言框）
-     */
     private void fetchMotivation() {
         Request request = new Request.Builder().url(MOTIVATION_API_URL).get().build();
-
         client.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                requireActivity().runOnUiThread(() -> {
-                    tvMotivation.setText("今天也要加油哦~");
-                });
+                requireActivity().runOnUiThread(() -> tvMotivation.setText("今天也要加油哦~"));
             }
-
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                 try {
                     String body = response.body().string();
                     JSONObject json = new JSONObject(body);
                     String sentence = json.optString("sentence", "今天也要加油哦~");
-
-                    requireActivity().runOnUiThread(() -> {
-                        tvMotivation.setText(sentence);
-                    });
+                    requireActivity().runOnUiThread(() -> tvMotivation.setText(sentence));
                 } catch (Exception e) {
-                    requireActivity().runOnUiThread(() -> {
-                        tvMotivation.setText("今天也要加油哦~");
-                    });
+                    requireActivity().runOnUiThread(() -> tvMotivation.setText("今天也要加油哦~"));
                 }
             }
         });
@@ -299,20 +224,16 @@ public class HomeFragment extends Fragment {
     private void autoLoginIfCredentialsExist() {
         String savedUser = prefs.getString(KEY_USERNAME, null);
         String savedPass = prefs.getString(KEY_PASSWORD, null);
-
         if (savedUser != null && savedPass != null && !savedUser.isEmpty() && !savedPass.isEmpty()) {
-            Log.d(TAG, "发现已保存的账号，自动登录: " + savedUser);
             webView.postDelayed(() -> {
                 pendingUser = savedUser;
                 pendingPass = savedPass;
                 startCrawl();
             }, 1000);
-        } else {
-            Log.d(TAG, "未发现已保存的账号，需要手动登录");
         }
     }
 
-    // 前端交互接口
+    // ==================== 前端调用接口 ====================
     public class FrontBridge {
         @JavascriptInterface
         public void login(String username, String password) {
@@ -352,29 +273,29 @@ public class HomeFragment extends Fragment {
             String username = prefs.getString(KEY_USERNAME, null);
             String password = prefs.getString(KEY_PASSWORD, null);
             if (username != null && !username.isEmpty()) {
-                String safeUser = username.replace("'", "\\'").replace("\"", "\\\"");
-                String safePass = password != null ? password.replace("'", "\\'").replace("\"", "\\\"") : "";
-                String json = "{\"username\":\"" + safeUser + "\",\"password\":\"" + safePass + "\"}";
-                mainHandler.post(() -> {
-                    webView.evaluateJavascript("window.receiveFromAndroid('saved_credentials', '" + json + "');", null);
-                });
+                String json = "{\"username\":\"" + username + "\",\"password\":\"" + (password != null ? password : "") + "\"}";
+                mainHandler.post(() -> webView.evaluateJavascript("window.receiveFromAndroid('saved_credentials', '" + json + "');", null));
             } else {
-                mainHandler.post(() -> {
-                    webView.evaluateJavascript("window.receiveFromAndroid('saved_credentials', 'null');", null);
-                });
+                mainHandler.post(() -> webView.evaluateJavascript("window.receiveFromAndroid('saved_credentials', 'null');", null));
             }
         }
 
-        // 🔥 周课表跳转
         @JavascriptInterface
         public void openWeekView(String coursesJson) {
-            Log.d(TAG, "openWeekView 被调用，JSON长度: " + coursesJson.length());
             Intent intent = new Intent(requireContext(), WeekViewActivity.class);
             intent.putExtra("courses_json", coursesJson);
             startActivity(intent);
         }
+
+        @JavascriptInterface
+        public void forceRetry() {
+            Log.d(TAG, "手动强制重试");
+            retryCount = 0;
+            startCrawl();
+        }
     }
 
+    // ==================== 爬虫主流程 ====================
     private void startCrawl() {
         if (isCrawling) return;
         isCrawling = true;
@@ -387,13 +308,23 @@ public class HomeFragment extends Fragment {
                         "var btn=document.querySelector('.btn .txt');if(btn)btn.textContent='登录中...';" +
                         "var spin=document.querySelector('.btn .loading');if(spin)spin.classList.remove('hidden');", null);
 
+        // 设置超时
         if (timeoutRunnable != null) mainHandler.removeCallbacks(timeoutRunnable);
         timeoutRunnable = () -> {
             if (isCrawling) {
                 Log.e(TAG, "爬取超时");
                 isCrawling = false;
                 hasInjectedLogin = false;
-                notifyFrontError("连接超时，请检查网络或账号密码");
+
+                // 超时重试
+                if (retryCount < MAX_RETRY) {
+                    retryCount++;
+                    Log.w(TAG, "超时，第 " + retryCount + " 次重试...");
+                    notifyFrontError("连接超时，正在重试...");
+                    mainHandler.postDelayed(() -> retryCrawl(), RETRY_DELAY_MS);
+                } else {
+                    notifyFrontError("连接超时，请检查网络或账号密码");
+                }
             }
         };
         mainHandler.postDelayed(timeoutRunnable, 25000);
@@ -402,9 +333,21 @@ public class HomeFragment extends Fragment {
         Log.d(TAG, "后台开始加载课表页...");
         crawlerView.stopLoading();
         crawlerView.clearHistory();
-        crawlerView.loadUrl("https://jwxt.wuyiu.edu.cn/jsxsd/framework/xsMainV_new.htmlx?t1=1");
+        crawlerView.loadUrl("https://jwxt.wuyiu.edu.cn/jsxsd/xskb/xskb_list.do");
     }
 
+    /**
+     * 重试爬取（保留Cookie，不重置计数）
+     */
+    private void retryCrawl() {
+        Log.d(TAG, "执行重试，当前重试次数: " + retryCount);
+        isCrawling = true;
+        hasInjectedLogin = false;
+        restoreCookies();
+        crawlerView.loadUrl("https://jwxt.wuyiu.edu.cn/jsxsd/xskb/xskb_list.do");
+    }
+
+    // ==================== WebView 客户端 ====================
     private class CrawlerClient extends WebViewClient {
         @Override
         public void onPageFinished(WebView view, String url) {
@@ -422,7 +365,7 @@ public class HomeFragment extends Fragment {
                 view.postDelayed(() -> injectAutoLogin(view), 1000);
             } else if (url.contains("xsMainV_new.htmlx") || url.contains("xsMainV.htmlx")) {
                 Log.d(TAG, "后台到达课表页，准备提取...");
-                view.postDelayed(() -> injectParser(view), 3500);
+                view.postDelayed(() -> injectParser(view), 1500);
             }
         }
 
@@ -438,12 +381,11 @@ public class HomeFragment extends Fragment {
                 (url.contains("/linkid/") || url.contains("/login") || url.contains("统一认证"));
     }
 
+    // ==================== 自动登录 JS 注入 ====================
     private void injectAutoLogin(WebView view) {
         if (pendingUser == null || pendingPass == null) return;
-
         String safeUser = pendingUser.replace("'", "\\'");
         String safePass = pendingPass.replace("'", "\\'");
-
         String js =
                 "(function() {" +
                         "    var username = '" + safeUser + "';" +
@@ -503,14 +445,32 @@ public class HomeFragment extends Fragment {
                         "    };" +
                         "    loop();" +
                         "})();";
-
         view.evaluateJavascript(js, null);
     }
 
+    // ==================== 课表解析 JS 注入 ====================
     private void injectParser(WebView view) {
+        // 设置解析超时（10秒）
+        mainHandler.postDelayed(() -> {
+            if (isCrawling) {
+                Log.e(TAG, "解析超时");
+                if (retryCount < MAX_RETRY) {
+                    retryCount++;
+                    Log.w(TAG, "解析超时，第 " + retryCount + " 次重试...");
+                    isCrawling = false;
+                    hasInjectedLogin = false;
+                    mainHandler.postDelayed(() -> retryCrawl(), RETRY_DELAY_MS);
+                } else {
+                    notifyFrontError("解析超时，请重试");
+                    isCrawling = false;
+                    hasInjectedLogin = false;
+                }
+            }
+        }, 10000);
+
         String js = "(function() { try {" +
                 "var table = document.querySelector('table.qz-weeklyTable');" +
-                "if (!table) { AndroidBack.onError('课表获取失败，请重新获取'); return; }" +
+                "if (!table) { AndroidBack.onError('未找到课表表格'); return; }" +
                 "var courses = [];" +
                 "var headers = [];" +
                 "var ths = table.querySelectorAll('thead tr th.qz-weeklyTable-th');" +
@@ -576,10 +536,36 @@ public class HomeFragment extends Fragment {
         view.evaluateJavascript(js, null);
     }
 
+    // ==================== Java 与 JS 桥接 ====================
     public class BackBridge {
         @JavascriptInterface
         public void onCourses(String json) {
             Log.d(TAG, "后台提取成功，JSON长度: " + json.length());
+
+            // 检查是否解析到有效数据
+            boolean hasValidData = false;
+            try {
+                List<?> courses = gson.fromJson(json, List.class);
+                hasValidData = courses != null && !courses.isEmpty();
+            } catch (Exception e) {
+                hasValidData = false;
+            }
+
+            // 🔥 解决方案：将 hasValidData 赋值给 final 变量
+            final boolean isValid = hasValidData;
+
+            // 如果没有有效数据，且未超过重试次数，则重试
+            if (!isValid && retryCount < MAX_RETRY) {
+                retryCount++;
+                Log.w(TAG, "解析到空课表，第 " + retryCount + " 次重试...");
+                notifyFrontError("获取课表为空，正在重试...");
+                isCrawling = false;
+                hasInjectedLogin = false;
+                mainHandler.postDelayed(() -> retryCrawl(), RETRY_DELAY_MS);
+                return;
+            }
+
+            // 正常处理
             if (timeoutRunnable != null) mainHandler.removeCallbacks(timeoutRunnable);
             isCrawling = false;
             hasInjectedLogin = false;
@@ -591,16 +577,34 @@ public class HomeFragment extends Fragment {
                 Log.d(TAG, "已保存账号密码");
             }
 
+            // 🔥 使用 final 变量 isValid
             mainHandler.post(() -> {
                 String escapedJson = json.replace("'", "\\'");
                 webView.evaluateJavascript("window.receiveFromAndroid('courses', '" + escapedJson + "');", null);
-                webView.evaluateJavascript("window.receiveFromAndroid('status', '登录成功');", null);
+                if (isValid) {
+                    webView.evaluateJavascript("window.receiveFromAndroid('status', '登录成功');", null);
+                } else {
+                    webView.evaluateJavascript("window.receiveFromAndroid('status', '获取课表失败，请重试');", null);
+                }
             });
         }
 
         @JavascriptInterface
         public void onError(String msg) {
             Log.e(TAG, "后台错误: " + msg);
+
+            // 错误时重试
+            if (retryCount < MAX_RETRY) {
+                retryCount++;
+                Log.w(TAG, "解析错误，第 " + retryCount + " 次重试...");
+                notifyFrontError("获取失败，正在重试...");
+                isCrawling = false;
+                hasInjectedLogin = false;
+                mainHandler.postDelayed(() -> retryCrawl(), RETRY_DELAY_MS);
+                return;
+            }
+
+            // 重试失败
             if (timeoutRunnable != null) mainHandler.removeCallbacks(timeoutRunnable);
             isCrawling = false;
             hasInjectedLogin = false;
@@ -618,6 +622,7 @@ public class HomeFragment extends Fragment {
         }
     }
 
+    // ==================== 辅助方法 ====================
     private void notifyFrontError(String msg) {
         mainHandler.post(() -> {
             String escapedMsg = msg.replace("'", "\\'");
@@ -665,6 +670,7 @@ public class HomeFragment extends Fragment {
         CookieManager.getInstance().removeAllCookies(null);
         pendingUser = null;
         pendingPass = null;
+        retryCount = 0;
     }
 
     @Override
@@ -672,6 +678,9 @@ public class HomeFragment extends Fragment {
         super.onDestroyView();
         if (crawlerView != null) {
             crawlerView.destroy();
+        }
+        if (timeoutRunnable != null) {
+            mainHandler.removeCallbacks(timeoutRunnable);
         }
     }
 }

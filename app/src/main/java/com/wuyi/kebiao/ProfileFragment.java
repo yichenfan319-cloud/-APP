@@ -28,9 +28,11 @@ import okhttp3.Response;
 
 public class ProfileFragment extends Fragment {
 
-    private static final String SERVER_BASE_URL = "http://47.105.75.20:3000"; // 替换为你的服务器地址
-    private static final String FEEDBACK_EMAIL = "QQ3450541935@outlook.com"; // 替换为你的反馈邮箱
-    private static final String CREATOR_NAME = "一夜星辰"; // 替换为你的昵称
+    // ==================== 配置常量 ====================
+    private static final String SERVER_BASE_URL = "http://47.105.75.20:3000";
+    private static final String FEEDBACK_EMAIL = "QQ3450541935@outlook.com";
+    private static final String CREATOR_NAME = "星辰的网站";
+    private static final String CREATOR_WEBSITE = "https://horizonos.icu";
 
     private TextView tvVersionName;
     private TextView tvAnnouncementStatus;
@@ -48,29 +50,32 @@ public class ProfileFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
-        // 初始化 OkHttp
         client = new OkHttpClient();
 
-        // 获取控件
         tvVersionName = view.findViewById(R.id.tv_version_name);
         TextView tvCreator = view.findViewById(R.id.tv_creator);
         tvAnnouncementStatus = view.findViewById(R.id.tv_announcement_status);
 
-        // 设置当前版本号
         tvVersionName.setText("v" + getCurrentVersionName());
-
-        // 设置创作者名称
         tvCreator.setText(CREATOR_NAME);
 
-        // 设置点击事件
+        // ==================== 设置点击事件 ====================
+
+        // 公告
         view.findViewById(R.id.layout_announcement).setOnClickListener(v -> checkAnnouncement());
+
+        // 版本更新
         view.findViewById(R.id.layout_version).setOnClickListener(v -> checkVersionUpdate());
+
+        // 问题反馈
         view.findViewById(R.id.layout_feedback).setOnClickListener(v -> sendFeedbackEmail());
+
+        // 创作者 - 点击跳转浏览器
+        view.findViewById(R.id.layout_creator).setOnClickListener(v -> openCreatorWebsite());
     }
 
-    /**
-     * 获取当前 App 版本名称
-     */
+    // ==================== 原有方法 ====================
+
     private String getCurrentVersionName() {
         try {
             PackageInfo packageInfo = requireContext().getPackageManager()
@@ -82,9 +87,6 @@ public class ProfileFragment extends Fragment {
         }
     }
 
-    /**
-     * 获取当前 App 版本号（用于比较）
-     */
     private int getCurrentVersionCode() {
         try {
             PackageInfo packageInfo = requireContext().getPackageManager()
@@ -96,9 +98,6 @@ public class ProfileFragment extends Fragment {
         }
     }
 
-    /**
-     * 检查公告
-     */
     private void checkAnnouncement() {
         tvAnnouncementStatus.setText("加载中...");
 
@@ -136,9 +135,6 @@ public class ProfileFragment extends Fragment {
         });
     }
 
-    /**
-     * 检查版本更新
-     */
     private void checkVersionUpdate() {
         String url = SERVER_BASE_URL + "/api/version";
         Request request = new Request.Builder().url(url).get().build();
@@ -163,7 +159,6 @@ public class ProfileFragment extends Fragment {
                     int currentVersionCode = getCurrentVersionCode();
 
                     if (latestVersionCode > currentVersionCode) {
-                        // 有新版本
                         requireActivity().runOnUiThread(() ->
                                 showUpdateDialog(latestVersionName, updateUrl)
                         );
@@ -181,9 +176,6 @@ public class ProfileFragment extends Fragment {
         });
     }
 
-    /**
-     * 发送反馈邮件
-     */
     private void sendFeedbackEmail() {
         Intent intent = new Intent(Intent.ACTION_SENDTO);
         intent.setData(Uri.parse("mailto:" + FEEDBACK_EMAIL));
@@ -197,9 +189,25 @@ public class ProfileFragment extends Fragment {
         }
     }
 
-    /**
-     * 显示公告弹窗
-     */
+    // 新增：打开创作者网站
+    private void openCreatorWebsite() {
+        if (CREATOR_WEBSITE.isEmpty()) {
+            Toast.makeText(requireContext(), "网站地址未配置", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setData(Uri.parse(CREATOR_WEBSITE));
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(requireContext(), "无法打开链接，请检查网络", Toast.LENGTH_SHORT).show();
+            e.printStackTrace();
+        }
+    }
+
+    // ==================== 弹窗方法 ====================
+
     private void showAnnouncementDialog(String title, String content) {
         new AlertDialog.Builder(requireContext())
                 .setTitle(title)
@@ -208,9 +216,6 @@ public class ProfileFragment extends Fragment {
                 .show();
     }
 
-    /**
-     * 显示更新弹窗
-     */
     private void showUpdateDialog(String latestVersion, String updateUrl) {
         new AlertDialog.Builder(requireContext())
                 .setTitle("发现新版本 v" + latestVersion)
@@ -227,9 +232,6 @@ public class ProfileFragment extends Fragment {
                 .show();
     }
 
-    /**
-     * 显示错误弹窗
-     */
     private void showErrorDialog(String message) {
         new AlertDialog.Builder(requireContext())
                 .setTitle("提示")

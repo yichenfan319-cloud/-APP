@@ -1,8 +1,26 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      应用主题（亮色 / 日间）。
+      配套文件：values-night/themes.xml —— 必须定义“完全同名”的 style
+      才会在深色模式下生效，否则该文件形同虚设。
+    -->
+
     <style name="Base.Theme.WuyiKebiao" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <!-- 品牌色：顶部信息栏、按钮主色 -->
+        <item name="colorPrimary">@color/brand_primary</item>
+        <item name="colorOnPrimary">@color/brand_primary_on</item>
+
+        <!-- 自定义语义色，供布局以 ?attr/... 引用 -->
+        <item name="colorSurfaceScreen">@color/surface_screen</item>
+        <item name="colorSurfaceCard">@color/surface_card</item>
+        <item name="colorDivider">@color/divider</item>
+        <item name="colorTextPrimary">@color/text_primary</item>
+        <item name="colorTextHint">@color/text_hint</item>
+
+        <!-- 状态栏跟随品牌色，图标用浅色（夜间自动改回深色图标） -->
+        <item name="android:statusBarColor">@color/brand_primary</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
     <style name="Theme.WuyiKebiao" parent="Base.Theme.WuyiKebiao" />

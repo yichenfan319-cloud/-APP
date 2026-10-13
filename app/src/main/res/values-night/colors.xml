@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      ============================================================
+      设计变量（夜间）
+      ============================================================
+      只放“与亮色不同”的变量名，其余自动继承 values/colors.xml。
+      课程格子用的 course_soft_* / course_text_* 刻意不在此覆盖：
+      它们是浅底深字，夜间保持浅底才能保证格子里的字看得清。
+      ============================================================
+    -->
+
+    <!-- 品牌色在夜间略微提亮，保证深色底上的辨识度 -->
+    <color name="brand_primary">#FF1565C0</color>
+    <color name="brand_primary_on">#FFFFFFFF</color>
+
+    <!-- 表面层：夜间用近黑底 + 略亮的卡片，形成层次 -->
+    <color name="surface_screen">#FF121212</color>
+    <color name="surface_card">#FF1E1E1E</color>
+    <color name="divider">#FF2E2E2E</color>
+
+    <!-- 文字 -->
+    <color name="text_primary">#FFE8EAED</color>
+    <color name="text_hint">#FF9E9E9E</color>
+
+    <!-- 课程格子：空位在夜间压暗 -->
+    <color name="grid_empty">#FF1A1A1A</color>
+    <color name="grid_stroke">#FF333333</color>
+</resources>

@@ -13,6 +13,7 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.ContextCompat;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -34,24 +35,49 @@ public class WeekViewActivity extends AppCompatActivity {
     private final int[] cellIds = {R.id.cell_mon, R.id.cell_tue, R.id.cell_wed, R.id.cell_thu, R.id.cell_fri, R.id.cell_sat, R.id.cell_sun};
     private final int[] tvIds = {R.id.tv_mon, R.id.tv_tue, R.id.tv_wed, R.id.tv_thu, R.id.tv_fri, R.id.tv_sat, R.id.tv_sun};
 
-    // 马卡龙柔和背景色（浅蓝、浅绿、浅黄、浅紫、浅橙、浅粉、浅青）
-    private final int[] SOFT_BG = {
-            0xFFE3F2FD, 0xFFE8F5E9, 0xFFFFF9C4,
-            0xFFF3E5F5, 0xFFFFE0B2, 0xFFFCE4EC, 0xFFE0F7FA
+    /*
+      课程格子的配色资源 id。真实色值定义在 res/values/colors.xml，
+      按课程名 hash 取模分配，同一门课每次颜色一样。
+
+      ⚠ 这两个数组必须等长，且顺序一一对应（SOFT_BG[i] 配 DARK_TEXT[i]），
+      新增颜色时两边都要加。用 colors.xml 而不是硬编码的原因：
+      以后换配色只改资源文件，不用碰 Java。
+    */
+    private static final int[] COURSE_SOFT_RES = {
+            R.color.course_soft_0, R.color.course_soft_1, R.color.course_soft_2,
+            R.color.course_soft_3, R.color.course_soft_4, R.color.course_soft_5,
+            R.color.course_soft_6
     };
-    // 对应的深色文字，保证对比度
-    private final int[] DARK_TEXT = {
-            0xFF1565C0, 0xFF2E7D32, 0xFFF57F17,
-            0xFF6A1B9A, 0xFFEF6C00, 0xFFC2185B, 0xFF00838F
+    private static final int[] COURSE_TEXT_RES = {
+            R.color.course_text_0, R.color.course_text_1, R.color.course_text_2,
+            R.color.course_text_3, R.color.course_text_4, R.color.course_text_5,
+            R.color.course_text_6
     };
+
+    // 解析后的实际色值，在 onCreate 里填充（此时才有 Context 可读资源）
+    private final int[] softBg = new int[COURSE_SOFT_RES.length];
+    private final int[] darkText = new int[COURSE_TEXT_RES.length];
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_week_view);
+        resolveDesignColors();
         setupToolbar();
         tableContent = findViewById(R.id.table_content);
         loadCourses();
+    }
+
+    /**
+     * 把 colors.xml 里的设计变量解析成实际色值。
+     * 用 ContextCompat.getColor 而不是 Context.getColor：后者要 API 23，
+     * 而本项目 minSdk 是 21。
+     */
+    private void resolveDesignColors() {
+        for (int i = 0; i < COURSE_SOFT_RES.length; i++) {
+            softBg[i] = ContextCompat.getColor(this, COURSE_SOFT_RES[i]);
+            darkText[i] = ContextCompat.getColor(this, COURSE_TEXT_RES[i]);
+        }
     }
 
     private void setupToolbar() {
@@ -130,29 +156,33 @@ public class WeekViewActivity extends AppCompatActivity {
     }
 
     private void setupCell(LinearLayout cell, TextView tv, Course c, String slot, String day, float d) {
+        // 空格子与边框的颜色（设计变量，随主题切换）
+        final int gridEmptyColor = ContextCompat.getColor(this, R.color.grid_empty);
+        final int gridStrokeColor = ContextCompat.getColor(this, R.color.grid_stroke);
+
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.RECTANGLE);
         bg.setCornerRadius(8 * d); // 8dp 圆角
 
         if (c != null) {
             // 根据课程名 hash 分配固定颜色，同一门课每次颜色一样
-            int colorIdx = Math.abs(c.name.hashCode()) % SOFT_BG.length;
+            int colorIdx = Math.abs(c.name.hashCode()) % softBg.length;
 
-            bg.setColor(SOFT_BG[colorIdx]);
+            bg.setColor(softBg[colorIdx]);
             bg.setStroke(1, 0x15000000); // 极淡的边框
 
             // 处理地点换行，把换行符换成空格避免显示错乱
             String loc = (c.location == null) ? "" : c.location.replace('\n', ' ');
             tv.setText(c.name + "\n" + loc);
-            tv.setTextColor(DARK_TEXT[colorIdx]);
+            tv.setTextColor(darkText[colorIdx]);
             tv.setTypeface(null, Typeface.BOLD);
             tv.setTextSize(12f);
 
             cell.setOnClickListener(v -> showCourseDetail(c));
         } else {
-            // 空单元格：浅灰背景，灰色虚线感边框
-            bg.setColor(0xFFFAFAFA);
-            bg.setStroke(1, 0xFFE0E0E0);
+            // 空单元格：浅灰背景 + 淡边框（夜间自动压暗）
+            bg.setColor(gridEmptyColor);
+            bg.setStroke(1, gridStrokeColor);
             tv.setText("");
             cell.setOnClickListener(v ->
                     Toast.makeText(this, day + " " + slot + " 暂无课程", Toast.LENGTH_SHORT).show()

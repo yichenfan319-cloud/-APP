@@ -11,7 +11,7 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:padding="16dp"
-        android:background="#034ea1">
+        android:background="?attr/colorPrimary">
 
         <TextView
             android:id="@+id/tv_greeting"
@@ -84,7 +84,7 @@
                 android:layout_height="wrap_content"
                 android:text="加载中..."
                 android:textSize="14sp"
-                android:textColor="#333333"
+                android:textColor="?attr/colorTextPrimary"
                 android:lineSpacingExtra="4dp" />
 
             <TextView
@@ -93,7 +93,7 @@
                 android:layout_marginTop="8dp"
                 android:text="—— 武院娘"
                 android:textSize="12sp"
-                android:textColor="#999999" />
+                android:textColor="?attr/colorTextHint" />
 
         </LinearLayout>
 
