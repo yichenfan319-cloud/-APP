@@ -54,6 +54,9 @@ public class HomeFragment extends Fragment {
     // 重试计数器
     private int retryCount = 0;
 
+    // 是否正在等待"切换周次"后的新课表（用于区分首次加载与切周次）
+    private boolean changeWeekPending = false;
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -190,6 +193,35 @@ public class HomeFragment extends Fragment {
             if (isAdded()) {
                 startActivity(new Intent(requireContext(), SettingsActivity.class));
             }
+        }
+
+        /**
+         * 切换课表周次。weekValue 为空字符串表示「全部」。
+         * 首页的周次选择控件调用这里。
+         */
+        @JavascriptInterface
+        public void selectWeek(String weekValue) {
+            final String v = (weekValue == null) ? "" : weekValue.trim();
+            mainHandler.post(() -> changeWeek(v));
+        }
+
+        /**
+         * 弹出原生周次选择面板。
+         * 周次列表由前端从教务系统页面拿到后回传，不在客户端硬编码。
+         */
+        @JavascriptInterface
+        public void requestWeekPicker(final String weeksJson, final String currentLabel) {
+            mainHandler.post(() -> {
+                if (!isAdded()) return;
+                WeekPickerDialog.show(requireContext(), weeksJson, currentLabel,
+                        (value, label) -> mainHandler.post(() -> {
+                            if (webView == null) return;
+                            // 回调前端，由前端统一走"请求切换 -> 等解析"的流程
+                            webView.evaluateJavascript(
+                                    "window.onWeekChosen(" + quoteJs(value) + "," + quoteJs(label) + ");",
+                                    null);
+                        }));
+            });
         }
 
         @JavascriptInterface
@@ -379,7 +411,7 @@ public class HomeFragment extends Fragment {
             }
         }, 10000);
 
-        String js = "(function() { try {" +
+        String js = "window.__parseTimetable = function() { try {" +
                 // 教务系统返回的地点文本存在前缀重复，例如：
                 //   瑞樟4瑞樟4-101   体育馆体育馆[篮球场]   屏山7屏山7-403[...]
                 // 判据：存在 k（2 <= k <= len/2）使 s 以「同一前缀连写两遍」开头，
@@ -468,7 +500,16 @@ public class HomeFragment extends Fragment {
                 "    }" +
                 "});" +
                 // 当前周次：教务系统已在页面里算好并选中，直接读，不要自己按开学日期推算。
-                // 优先读 select 的 selected option，其次读 layui 渲染出来的 input value。
+                // 同时把可选周次一起回传，让界面上的周次选择由页面数据驱动，
+                // 而不是在前端硬编码「第 1..20 周」。
+                "var weekOptions = [];" +
+                "var weekSel = document.getElementById('week');" +
+                "if (weekSel) {" +
+                "    for (var wi = 0; wi < weekSel.options.length; wi++) {" +
+                "        var op = weekSel.options[wi];" +
+                "        if (op.value) weekOptions.push({value: op.value, label: op.textContent.trim()});" +
+                "    }" +
+                "}" +
                 "var currentWeek = '';" +
                 "var selOpt = document.querySelector('select option[selected]');" +
                 "if (selOpt) currentWeek = selOpt.textContent.trim();" +
@@ -483,10 +524,72 @@ public class HomeFragment extends Fragment {
                 "        if (/第.+周/.test(v)) { currentWeek = v; break; }" +
                 "    }" +
                 "}" +
-                "AndroidBack.onCourses(JSON.stringify({courses: courses, currentWeek: currentWeek}));" +
+                "AndroidBack.onCourses(JSON.stringify({courses: courses, currentWeek: currentWeek, weeks: weekOptions}));" +
                 "} catch(e) { AndroidBack.onError(e.message); }" +
-                "})();";
+                "};" +
+                "window.__parseTimetable();";
         view.evaluateJavascript(js, null);
+    }
+
+    /**
+     * 切换课表周次。
+     *
+     * 复用学校页面自己的逻辑：把 #week 的值改掉，再调用它页面里的 se(null)，
+     * 它会用 jQuery 的 $(...).load() 把新课表注入 #kbLoading 容器。
+     *
+     * 为什么不直接拼那个 URL：URL 里带 kbjcmsid / xnxq01id 等参数，
+     * 前者随课表模式变化、后者每学期都不同。复用页面逻辑就不必写死它们。
+     *
+     * 等待策略：观察 #kbLoading 子树变化，而不是固定 sleep。
+     * 一旦容器内容真的更新了就立刻解析；超时则报错，避免静默卡住。
+     */
+    private void changeWeek(String weekValue) {
+        if (isCrawling) {
+            appendLog("正在忙，请稍后再切换周次");
+            return;
+        }
+        isCrawling = true;
+        changeWeekPending = true;
+        appendLog("切换周次：" + (weekValue.isEmpty() ? "全部" : "第 " + weekValue + " 周"));
+
+        String js =
+                "(function() {" +
+                "  var wk = document.getElementById('week');" +
+                "  if (!wk) { AndroidBack.onError('未找到周次选择控件 #week'); return; }" +
+                "  wk.value = '" + weekValue + "';" +
+                "  var box = document.getElementById('kbLoading');" +
+                "  if (!box) { AndroidBack.onError('未找到课表容器 #kbLoading'); return; }" +
+                "  if (typeof se !== 'function') { AndroidBack.onError('页面未定义 se()'); return; }" +
+                "  var done = false;" +
+                "  var snap = function() {" +
+                "    return box.innerHTML.length + ':' + box.querySelectorAll('li.courselists-item').length;" +
+                "  };" +
+                "  var before = snap();" +
+                "  var fire = function(tag) {" +
+                "    if (done) return; done = true;" +
+                "    if (obs) obs.disconnect();" +
+                "    if (timer) clearTimeout(timer);" +
+                "    AndroidBack.onLog('周次加载' + tag + '，准备重新解析');" +
+                "    __parseTimetable();" +
+                "  };" +
+                "  var obs = new MutationObserver(function() {" +
+                "    if (snap() !== before) fire('完成');" +
+                "  });" +
+                "  obs.observe(box, {childList: true, subtree: true, characterData: true});" +
+                // 兜底：容器结构没变（例如该周本就没课）也要收尾，不能让状态卡住
+                "  var timer = setTimeout(function() { fire('超时'); }, 6000);" +
+                "  try { se(null); } catch (e) { AndroidBack.onError('调用 se() 失败: ' + e.message); }" +
+                "})();";
+        crawlerView.evaluateJavascript(js, null);
+
+        // 二次兜底：若上面整段都没能回调（页面异常等），恢复状态
+        mainHandler.postDelayed(() -> {
+            if (changeWeekPending) {
+                changeWeekPending = false;
+                isCrawling = false;
+                appendLog("周次切换超时，请重试");
+            }
+        }, 15000);
     }
 
     // ==================== Java 与 JS 桥接 ====================
@@ -496,8 +599,8 @@ public class HomeFragment extends Fragment {
             Log.d(TAG, "后台提取成功，JSON长度: " + json.length());
 
             // 解析结果结构：
-            //   {"courses":[ {...}, ... ], "currentWeek":"第七周"}
-            // currentWeek 由教务系统页面里已选中的周次直接读出，不自行推算。
+            //   {"courses":[...], "currentWeek":"第七周", "weeks":[{"value":"7","label":"第七周"}...]}
+            // currentWeek 与可选周次均来自教务系统页面，不自行推算。
             boolean hasValidData = false;
             int courseCount = 0;
             String currentWeek = "";
@@ -511,12 +614,17 @@ public class HomeFragment extends Fragment {
                 hasValidData = false;
             }
 
+            // 如果是"切换周次"触发的解析，无论结果如何都不要再走重试逻辑，
+            // 否则用户选了一个没课的周，会被当成抓取失败反复重试。
+            final boolean fromWeekChange = changeWeekPending;
+            changeWeekPending = false;
+
             final boolean isValid = hasValidData;
             appendLog("解析得到 " + courseCount + " 门课程"
                     + (currentWeek.isEmpty() ? "" : "，当前" + currentWeek));
 
-            // 如果没有有效数据，且未超过重试次数，则重试
-            if (!isValid && retryCount < MAX_RETRY) {
+            // 没有有效数据且不是切周次导致的，才重试
+            if (!isValid && !fromWeekChange && retryCount < MAX_RETRY) {
                 retryCount++;
                 appendLog("课表为空，第 " + retryCount + " 次重试…");
                 notifyFrontError("获取课表为空，正在重试...");
@@ -585,6 +693,17 @@ public class HomeFragment extends Fragment {
     }
 
     // ==================== 辅助方法 ====================
+    /**
+     * 把任意字符串安全地嵌进 JS 表达式。
+     *
+     * 用 JSONObject.quote 而不是手写 replace("'", "\\'"):
+     * 后者只处理单引号，一旦内容里出现反斜杠、换行等字符就会破坏 JS 字符串字面量。
+     * JSON 的字符串转义规则是 JS 字符串转义的子集，因此可以安全复用。
+     */
+    private static String quoteJs(String s) {
+        return JSONObject.quote(s == null ? "" : s);
+    }
+
     /**
      * 提示前端出错。
      *

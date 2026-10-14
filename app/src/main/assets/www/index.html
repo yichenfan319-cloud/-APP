@@ -535,10 +535,20 @@
 
     function courses() { return window.coursesData || []; }
 
+    // 当前视图：'today' | 'tomorrow' | 'week'。
+    // 切换周次后要按用户原来在看的那一档重绘，而不是一律跳回"今天"。
+    let currentView = 'today';
+
     function setActiveTab(btn) {
         [todayBtn, tomorrowBtn, weekBtn].forEach(function(b) {
             b.classList.toggle('active', b === btn);
         });
+    }
+
+    function rerenderCurrentView() {
+        if (currentView === 'tomorrow') showTomorrow();
+        else if (currentView === 'week') showWeek();
+        else showToday();
     }
 
     function weekdayName(offsetDays) {
@@ -548,6 +558,7 @@
     }
 
     function showToday() {
+        currentView = 'today';
         setActiveTab(todayBtn);
         const day = weekdayName(0);
         const list = sortBySlot(courses().filter(c => c.dayOfWeek === day));
@@ -556,6 +567,7 @@
     }
 
     function showTomorrow() {
+        currentView = 'tomorrow';
         setActiveTab(tomorrowBtn);
         const day = weekdayName(1);
         const list = sortBySlot(courses().filter(c => c.dayOfWeek === day));
@@ -564,6 +576,7 @@
     }
 
     function showWeek() {
+        currentView = 'week';
         setActiveTab(weekBtn);
         const all = courses();
         if (all.length === 0) {
@@ -626,30 +639,45 @@
        ============================================================ */
     window.receiveFromAndroid = function(type, data) {
         if (type === 'courses') {
-            // 先切换界面（showMainPage 会清空日志），再打诊断信息，
-            // 否则诊断行会被 clearLogs() 冲掉 —— 之前就踩过这个坑。
+            // 载荷结构：{"courses":[...], "currentWeek":"第七周", "weeks":[{value,label},...]}
             let count = -1;
             let weekText = '';
+            let isWeekChange = false;
             try {
-                // 载荷结构：{"courses":[...], "currentWeek":"第七周"}
                 const payload = JSON.parse(data);
+                // 切换周次时不要清空日志、也不要重置界面，
+                // 否则用户看不到"周次加载完成"这类过程信息。
+                isWeekChange = window._weekChangePending === true;
+                window._weekChangePending = false;
+
                 window.coursesData = payload.courses || [];
+                window.availableWeeks = payload.weeks || [];
                 weekText = payload.currentWeek || '';
                 count = window.coursesData.length;
+
                 setLoginBtnLoading(false);
-                showMainPage();
+                if (isWeekChange) {
+                    // 保留日志，只更新周次标签并重绘当前视图
+                    if (weekText) weekLabel.textContent = weekText;
+                    pushLog('周次已切换，共 ' + count + ' 门课程');
+                } else {
+                    // 首次加载：切到主界面（showMainPage 会清空日志）
+                    showMainPage();
+                }
             } catch (e) {
                 showMainPage();
                 pushLog('解析课表失败：' + e.message, 'err');
                 return;
             }
-            // 周次由教务系统页面给出（已自动匹配到当前周），不自行推算
-            if (weekText) {
-                weekLabel.textContent = weekText;
+
+            if (!isWeekChange) {
+                // 周次由教务系统页面给出（已自动匹配到当前周），不自行推算
+                if (weekText) {
+                    weekLabel.textContent = weekText;
+                }
+                pushLog('前端收到 ' + (data == null ? 0 : data.length) + ' 字符，解析出 ' + count + ' 门课程');
             }
-            // 诊断：区分「注入被截断」和「解析结果为空」两种原因
-            pushLog('前端收到 ' + (data == null ? 0 : data.length) + ' 字符，解析出 ' + count + ' 门课程');
-            showToday();
+            rerenderCurrentView();
         } else if (type === 'log') {
             pushLog(data || '');
         } else if (type === 'status') {
@@ -740,9 +768,35 @@
         setTimeout(function() { window.requestSavedCredentials(); }, 400);
     };
 
-    // 周次切换：逻辑待定，先给出明确反馈而不是静默无响应
+    // 周次选择：把教务系统回传的真实周次列表交给原生侧弹窗，
+    // 由原生侧在用户选完后回调 Android.selectWeek()。
+    // 不用 window.prompt()：那需要 WebChromeClient.onJsPrompt 才会弹出，
+    // 当前没有重写该方法，prompt 会毫无反应。
+    let weekPickerBusy = false;
+
     weekPicker.onclick = function() {
-        pushLog('周次切换尚未实现（待确定周次数据来源）', 'warn');
+        const weeks = window.availableWeeks || [];
+        if (weeks.length === 0) {
+            pushLog('尚未获取到周次列表，请先刷新课表', 'warn');
+            return;
+        }
+        if (weekPickerBusy) return;
+        weekPickerBusy = true;
+        setTimeout(function() { weekPickerBusy = false; }, 800);
+
+        if (window.Android && Android.requestWeekPicker) {
+            Android.requestWeekPicker(JSON.stringify(weeks), weekLabel.textContent || '');
+        } else {
+            pushLog('原生接口不可用', 'err');
+        }
+    };
+
+    // 原生侧在用户选定周次后调用，再转交给 Android.selectWeek 真正加载
+    window.onWeekChosen = function(value, label) {
+        window._weekChangePending = true;
+        weekLabel.textContent = label || weekLabel.textContent;
+        pushLog('请求切换到「' + (label || '全部') + '」…');
+        Android.selectWeek(value || '');
     };
 
     document.getElementById('settingsBtn').onclick = function() {
