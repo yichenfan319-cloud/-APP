@@ -12,6 +12,8 @@ android {
         targetSdk = 34
         versionCode = 10
         versionName = "1.3.6-beta"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -30,16 +32,25 @@ android {
 }
 
 dependencies {
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("com.google.android.material:material:1.11.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-    implementation("com.google.code.gson:gson:2.10.1")
-    implementation("com.google.android.material:material:1.9.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation(libs.navigation.fragment.ktx)
-    implementation(libs.navigation.ui.ktx)
-    implementation("androidx.navigation:navigation-fragment:2.7.7")
-    implementation("androidx.navigation:navigation-ui:2.7.7")
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
+    // 依赖统一由 gradle/libs.versions.toml 管理，不再在此手写版本号。
+    //
+    // 清理前的状况（留作记录）：
+    //   appcompat 声明了 4 次、material 声明了 2 次（1.11.0 与 1.9.0 各一次），
+    //   实际生效的是版本较高的那个，与 libs.versions.toml 里写的值并不一致。
+    //   navigation 同时引了 -ktx:2.6.0 与普通版:2.7.7，前者是 Kotlin 扩展包，
+    //   对本 Java 工程无用，只会多拖进 Kotlin stdlib。
+
+    implementation(libs.appcompat)
+    implementation(libs.material)
+    implementation(libs.constraintlayout)
+
+    implementation(libs.navigation.fragment)
+    implementation(libs.navigation.ui)
+
+    implementation(libs.okhttp)
+    implementation(libs.gson)
+
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.ext.junit)
+    androidTestImplementation(libs.espresso.core)
 }

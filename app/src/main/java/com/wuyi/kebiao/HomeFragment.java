@@ -16,7 +16,6 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -27,17 +26,8 @@ import androidx.fragment.app.Fragment;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
-import org.json.JSONObject;
-
-import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.List;
-
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
 
 public class HomeFragment extends Fragment {
 
@@ -46,10 +36,6 @@ public class HomeFragment extends Fragment {
     private static final String KEY_COOKIES = "saved_cookies";
     private static final String KEY_USERNAME = "saved_username";
     private static final String KEY_PASSWORD = "saved_password";
-
-    // 服务器地址
-    private static final String WEATHER_API_URL = "http://47.105.75.20:8000/api/weather";
-    private static final String MOTIVATION_API_URL = "http://47.105.75.20:8002/api/weather/tip";
 
     // 重试机制常量
     private static final int MAX_RETRY = 1;      // 最大重试次数（只重试1次）
@@ -60,15 +46,9 @@ public class HomeFragment extends Fragment {
     private SharedPreferences prefs;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Gson gson = new Gson();
-    private OkHttpClient client;
 
     // UI组件
     private TextView tvGreeting;
-    private TextView tvWeather;
-    private ImageView ivWeatherIcon;
-    private LinearLayout layoutWeather;
-    private ImageView ivCharacter;
-    private TextView tvMotivation;
 
     // 登录状态
     private String pendingUser = null;
@@ -87,7 +67,6 @@ public class HomeFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_home, container, false);
 
         prefs = requireActivity().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        client = new OkHttpClient();
         webView = view.findViewById(R.id.webView);
 
         initHomeUI(view);
@@ -109,17 +88,8 @@ public class HomeFragment extends Fragment {
 
     private void initHomeUI(View view) {
         tvGreeting = view.findViewById(R.id.tv_greeting);
-        tvWeather = view.findViewById(R.id.tv_weather);
-        ivWeatherIcon = view.findViewById(R.id.iv_weather_icon);
-        layoutWeather = view.findViewById(R.id.layout_weather);
-        ivCharacter = view.findViewById(R.id.iv_character);
-        tvMotivation = view.findViewById(R.id.tv_motivation);
 
         updateGreeting();
-        fetchWeather();
-        fetchMotivation();
-
-        layoutWeather.setOnClickListener(v -> fetchWeather());
     }
 
     private void updateGreeting() {
@@ -131,69 +101,6 @@ public class HomeFragment extends Fragment {
         else if (hour >= 18 && hour < 22) greeting = "可以放松啦";
         else greeting = "难道你是夜猫子";
         tvGreeting.setText(greeting);
-    }
-
-    private void fetchWeather() {
-        Request request = new Request.Builder().url(WEATHER_API_URL).get().build();
-        client.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                requireActivity().runOnUiThread(() -> {
-                    tvWeather.setText("天气获取失败");
-                    ivWeatherIcon.setImageResource(R.drawable.ic_weather_default);
-                });
-            }
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                try {
-                    String body = response.body().string();
-                    JSONObject json = new JSONObject(body);
-                    String weather = json.optString("weather", "未知");
-                    String temp = json.optString("temp", "");
-                    String city = json.optString("city", "");
-                    int iconRes = weather.contains("晴") ? R.drawable.ic_weather_sunny :
-                            weather.contains("雨") ? R.drawable.ic_weather_rainy : R.drawable.ic_weather_default;
-                    String weatherText = city + " " + weather + " " + temp;
-                    requireActivity().runOnUiThread(() -> {
-                        tvWeather.setText(weatherText.trim());
-                        ivWeatherIcon.setImageResource(iconRes);
-                    });
-                    updateCharacterImage(weather);
-                } catch (Exception e) {
-                    requireActivity().runOnUiThread(() -> tvWeather.setText("天气解析失败"));
-                }
-            }
-        });
-    }
-
-    private void updateCharacterImage(String weather) {
-        int resId;
-        if (weather.contains("晴")) resId = R.drawable.character_sunny;
-        else if (weather.contains("雨")) resId = R.drawable.character_rainy;
-        else if (weather.contains("阴") || weather.contains("云")) resId = R.drawable.character_cloudy;
-        else resId = R.drawable.character_default;
-        requireActivity().runOnUiThread(() -> ivCharacter.setImageResource(resId));
-    }
-
-    private void fetchMotivation() {
-        Request request = new Request.Builder().url(MOTIVATION_API_URL).get().build();
-        client.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                requireActivity().runOnUiThread(() -> tvMotivation.setText("今天也要加油哦~"));
-            }
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                try {
-                    String body = response.body().string();
-                    JSONObject json = new JSONObject(body);
-                    String sentence = json.optString("sentence", "今天也要加油哦~");
-                    requireActivity().runOnUiThread(() -> tvMotivation.setText(sentence));
-                } catch (Exception e) {
-                    requireActivity().runOnUiThread(() -> tvMotivation.setText("今天也要加油哦~"));
-                }
-            }
-        });
     }
 
     private void setupWebView(WebView wv) {
@@ -333,7 +240,7 @@ public class HomeFragment extends Fragment {
         Log.d(TAG, "后台开始加载课表页...");
         crawlerView.stopLoading();
         crawlerView.clearHistory();
-        crawlerView.loadUrl("https://jwxt.wuyiu.edu.cn/jsxsd/xskb/xskb_list.do");
+        crawlerView.loadUrl("https://jwxt.wuyiu.edu.cn/jsxsd/framework/xsMainV_new.htmlx?t1=1");
     }
 
     /**
@@ -344,7 +251,7 @@ public class HomeFragment extends Fragment {
         isCrawling = true;
         hasInjectedLogin = false;
         restoreCookies();
-        crawlerView.loadUrl("https://jwxt.wuyiu.edu.cn/jsxsd/xskb/xskb_list.do");
+        crawlerView.loadUrl("https://jwxt.wuyiu.edu.cn/jsxsd/framework/xsMainV_new.htmlx?t1=1");
     }
 
     // ==================== WebView 客户端 ====================

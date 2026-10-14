@@ -2,25 +2,44 @@
 <resources>
     <!--
       ============================================================
-      设计变量（亮色）
+      设计变量（亮色）· 按 Material 3 色彩角色组织
       ============================================================
-      values-night/colors.xml 里放同名变量即可自动切换夜间配色，
-      布局和 Java 代码只引用变量名，不再出现硬编码色值。
+      values-night/colors.xml 里放同名变量即可自动切换夜间配色。
+      命名对照 M3：
+        primary / onPrimary            主色与其上的文字
+        surface                        页面底色
+        surfaceContainer               比页面略高的容器（卡片、列表）
+        surfaceContainerHigh           再高一层的容器（弹窗、粘性头部）
+        outlineVariant                 极淡的分割线
+        文字用 textPrimary / textHint（M3 的 onSurface / onSurfaceVariant）
       ============================================================
     -->
 
-    <!-- 基础色 -->
+    <!-- 基础色（保留，兼容旧引用） -->
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <!-- 品牌色（校徽蓝）——顶部信息栏、按钮主色 -->
+    <!-- 主色（校徽蓝） -->
     <color name="brand_primary">#FF034EA1</color>
     <color name="brand_primary_on">#FFFFFFFF</color>
 
-    <!-- 表面层：screen 是整页底色，card 是浮起来的卡片/列表底色 -->
+    <!--
+      底部导航的选中态配色。
+      M3 默认用 secondaryContainer 画选中胶囊，而默认值是淡紫（#E8DEF8），
+      与蓝色品牌冲突。这里覆盖成品牌蓝的浅色衍生。
+      brand_primary_container 画胶囊底，brand_primary_on_container 是胶囊上的图标/文字。
+    -->
+    <color name="brand_primary_container">#FFD6E3F7</color>
+    <color name="brand_primary_on_container">#FF034EA1</color>
+
+    <!-- 表面层：M3 用离页面越高、容器越亮的层级表达"浮起来" -->
     <color name="surface_screen">#FFF0F2F5</color>
     <color name="surface_card">#FFFFFFFF</color>
+    <color name="surface_container_high">#FFFFFFFF</color>
+
+    <!-- 描边与分割 -->
     <color name="divider">#FFE0E0E0</color>
+    <color name="outline_variant">#FFE0E0E0</color>
 
     <!-- 文字 -->
     <color name="text_primary">#FF1A2C3E</color>
@@ -32,7 +51,7 @@
 
     <!--
       课程格子配色：按课程名 hash 取模分配，同一门课颜色恒定。
-      这两个数组成对使用，长度必须一致（WeekViewActivity 里断言依赖这一点）。
+      这两个数组成对使用，长度必须一致（WeekViewActivity 里有长度校验）。
       注意：这些是浅色底 + 深色字，在夜间模式下刻意保持浅底，
       以保证格子内文字始终可读，不要给它们加 values-night 版本。
     -->

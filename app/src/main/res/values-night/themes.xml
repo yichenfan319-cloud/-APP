@@ -12,13 +12,19 @@
         <item name="colorPrimary">@color/brand_primary</item>
         <item name="colorOnPrimary">@color/brand_primary_on</item>
 
+        <!-- 底部导航选中态：覆盖 M3 默认的淡紫配色，改为品牌蓝 -->
+        <item name="colorSecondaryContainer">@color/brand_primary_container</item>
+        <item name="colorOnSecondaryContainer">@color/brand_primary_on_container</item>
+
         <item name="colorSurfaceScreen">@color/surface_screen</item>
         <item name="colorSurfaceCard">@color/surface_card</item>
+        <item name="colorSurfaceContainerHigh">@color/surface_container_high</item>
         <item name="colorDivider">@color/divider</item>
+        <item name="colorOutlineVariant">@color/outline_variant</item>
         <item name="colorTextPrimary">@color/text_primary</item>
         <item name="colorTextHint">@color/text_hint</item>
 
-        <!-- 夜间状态栏压暗，图标改用浅色 -->
+        <!-- 夜间状态栏压暗，图标用浅色 -->
         <item name="android:statusBarColor">@color/surface_screen</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>

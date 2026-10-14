@@ -2,7 +2,7 @@
 <resources>
     <!--
       ============================================================
-      设计变量（夜间）
+      设计变量（夜间）· 按 Material 3 色彩角色组织
       ============================================================
       只放“与亮色不同”的变量名，其余自动继承 values/colors.xml。
       课程格子用的 course_soft_* / course_text_* 刻意不在此覆盖：
@@ -10,14 +10,22 @@
       ============================================================
     -->
 
-    <!-- 品牌色在夜间略微提亮，保证深色底上的辨识度 -->
+    <!-- 主色在夜间略微提亮，保证深色底上的辨识度 -->
     <color name="brand_primary">#FF1565C0</color>
     <color name="brand_primary_on">#FFFFFFFF</color>
 
-    <!-- 表面层：夜间用近黑底 + 略亮的卡片，形成层次 -->
+    <!-- 底部导航选中胶囊：夜间用深蓝底 + 亮蓝图标 -->
+    <color name="brand_primary_container">#FF1E3A5F</color>
+    <color name="brand_primary_on_container">#FF9EC6F5</color>
+
+    <!-- 表面层：夜间近黑底 + 逐层变亮的容器 -->
     <color name="surface_screen">#FF121212</color>
     <color name="surface_card">#FF1E1E1E</color>
+    <color name="surface_container_high">#FF262626</color>
+
+    <!-- 描边与分割 -->
     <color name="divider">#FF2E2E2E</color>
+    <color name="outline_variant">#FF2E2E2E</color>
 
     <!-- 文字 -->
     <color name="text_primary">#FFE8EAED</color>

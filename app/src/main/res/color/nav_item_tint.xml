@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  底部导航图标的着色（选中 / 未选中）。
+  之前布局里用 app:itemIconTint="?attr/colorTextHint" 给了单一颜色，
+  会把 Material 3 的选中态着色整个覆盖掉（胶囊是蓝的、图标却是灰的）。
+  这里显式区分两种状态：
+    选中   → 与选中胶囊同色系的深蓝（夜间为亮蓝）
+    未选中 → 次要文字色
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="?attr/colorTextHint" android:state_checked="false" />
+    <item android:color="?attr/colorPrimary" android:state_checked="true" />
+</selector>

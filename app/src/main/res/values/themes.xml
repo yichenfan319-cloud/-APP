@@ -7,18 +7,24 @@
     -->
 
     <style name="Base.Theme.WuyiKebiao" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- 品牌色：顶部信息栏、按钮主色 -->
+        <!-- 主色：顶部信息栏、按钮主色 -->
         <item name="colorPrimary">@color/brand_primary</item>
         <item name="colorOnPrimary">@color/brand_primary_on</item>
+
+        <!-- 底部导航选中态：覆盖 M3 默认的淡紫配色，改为品牌蓝 -->
+        <item name="colorSecondaryContainer">@color/brand_primary_container</item>
+        <item name="colorOnSecondaryContainer">@color/brand_primary_on_container</item>
 
         <!-- 自定义语义色，供布局以 ?attr/... 引用 -->
         <item name="colorSurfaceScreen">@color/surface_screen</item>
         <item name="colorSurfaceCard">@color/surface_card</item>
+        <item name="colorSurfaceContainerHigh">@color/surface_container_high</item>
         <item name="colorDivider">@color/divider</item>
+        <item name="colorOutlineVariant">@color/outline_variant</item>
         <item name="colorTextPrimary">@color/text_primary</item>
         <item name="colorTextHint">@color/text_hint</item>
 
-        <!-- 状态栏跟随品牌色，图标用浅色（夜间自动改回深色图标） -->
+        <!-- 状态栏跟随主色 -->
         <item name="android:statusBarColor">@color/brand_primary</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>

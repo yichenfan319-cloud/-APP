@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  底部导航文字的着色（选中 / 未选中）。
+  未选中用次要文字色，选中用品牌主色，保证选中项一眼可辨。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="?attr/colorTextHint" android:state_checked="false" />
+    <item android:color="?attr/colorPrimary" android:state_checked="true" />
+</selector>
