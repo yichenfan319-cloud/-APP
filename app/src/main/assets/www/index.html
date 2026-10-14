@@ -539,6 +539,13 @@
     // 切换周次后要按用户原来在看的那一档重绘，而不是一律跳回"今天"。
     let currentView = 'today';
 
+    // 用户主动选定的周次。为什么要单独记：
+    // payload.currentWeek 来自教务系统 <select> 的 selected 属性，而该属性是
+    // 服务器渲染时写死的 —— se() 异步加载新表格时不会更新它。
+    // 因此切周次后若用 payload.currentWeek 覆盖，就会把用户选的周次又改回旧值。
+    let chosenWeek = '';
+    let chosenWeekAt = 0;
+
     function setActiveTab(btn) {
         [todayBtn, tomorrowBtn, weekBtn].forEach(function(b) {
             b.classList.toggle('active', b === btn);
@@ -658,8 +665,18 @@
                 setLoginBtnLoading(false);
                 if (isWeekChange) {
                     // 保留日志，只更新周次标签并重绘当前视图
-                    if (weekText) weekLabel.textContent = weekText;
+                    // 注意：这里不要用 weekText 覆盖标签。
+                    // 该值是服务端渲染时写死的 <select selected>，切周次后仍是旧值，
+                    // 会刚把用户选的「第一周」改回「第七周」。
+                    // 标签已在 onWeekChosen() 里按用户选择更新过。
+                    const stale = chosenWeekAt > 0 && (Date.now() - chosenWeekAt) < 30000;
+                    if (!stale && weekText) weekLabel.textContent = weekText;
                     pushLog('周次已切换，共 ' + count + ' 门课程');
+                    // 服务端周次与实际不符时提醒一次，便于日后排查
+                    if (stale && weekText && weekText !== weekLabel.textContent) {
+                        pushLog('提示：页面标题仍为「' + weekText + '」，以你选择的「'
+                            + weekLabel.textContent + '」为准', 'warn');
+                    }
                 } else {
                     // 首次加载：切到主界面（showMainPage 会清空日志）
                     showMainPage();
@@ -793,8 +810,10 @@
 
     // 原生侧在用户选定周次后调用，再转交给 Android.selectWeek 真正加载
     window.onWeekChosen = function(value, label) {
+        chosenWeek = label || '';
+        chosenWeekAt = Date.now();
         window._weekChangePending = true;
-        weekLabel.textContent = label || weekLabel.textContent;
+        if (label) weekLabel.textContent = label;
         pushLog('请求切换到「' + (label || '全部') + '」…');
         Android.selectWeek(value || '');
     };
