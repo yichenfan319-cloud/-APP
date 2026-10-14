@@ -4,4 +4,66 @@
         <item name="android:windowFullscreen">true</item>
         <item name="android:windowBackground">@drawable/splash_bg</item>
     </style>
+
+    <!--
+      ============================================================
+      设置页的行样式
+      ============================================================
+      把「行容器 / 标题 / 副标题 / 右侧动作 / 箭头 / 分割线」抽成样式，
+      避免在布局里反复写同一组属性，也便于以后整体调间距。
+      ============================================================
+    -->
+    <style name="SettingsRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:paddingStart">18dp</item>
+        <item name="android:paddingEnd">18dp</item>
+        <item name="android:paddingTop">16dp</item>
+        <item name="android:paddingBottom">16dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:background">?attr/selectableItemBackground</item>
+    </style>
+
+    <style name="SettingsRowTitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">17sp</item>
+        <item name="android:textColor">?attr/colorTextPrimary</item>
+    </style>
+
+    <style name="SettingsRowSubtitle">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">?attr/colorTextHint</item>
+    </style>
+
+    <!-- 右侧动作文字（如「点击查看」「星辰的网站」），用强调色表示可点 -->
+    <style name="SettingsRowAction">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">?attr/colorPrimary</item>
+        <item name="android:layout_marginEnd">6dp</item>
+    </style>
+
+    <!-- 右侧箭头：作为"可点击"的引导 -->
+    <style name="SettingsRowArrow">
+        <item name="android:layout_width">20dp</item>
+        <item name="android:layout_height">20dp</item>
+        <item name="android:src">@drawable/ic_arrow_forward</item>
+        <item name="android:tint">?attr/colorTextHint</item>
+        <item name="android:contentDescription">@null</item>
+    </style>
+
+    <style name="SettingsDivider">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:layout_marginStart">18dp</item>
+        <item name="android:background">?attr/colorDivider</item>
+    </style>
 </resources>
