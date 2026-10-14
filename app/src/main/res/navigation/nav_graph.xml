@@ -5,16 +5,14 @@
     android:id="@+id/nav_graph"
     app:startDestination="@id/navigation_home">
 
+    <!--
+      只保留首页。原 navigation_profile 目的地已移除：
+      个人页现在由 SettingsActivity 承载（顶栏齿轮图标进入）。
+    -->
     <fragment
         android:id="@+id/navigation_home"
         android:name="com.wuyi.kebiao.HomeFragment"
         android:label="主界面"
         tools:layout="@layout/fragment_home" />
-
-    <fragment
-        android:id="@+id/navigation_profile"
-        android:name="com.wuyi.kebiao.ProfileFragment"
-        android:label="我的"
-        tools:layout="@layout/fragment_profile" />
 
 </navigation>

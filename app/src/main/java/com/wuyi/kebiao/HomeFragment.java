@@ -16,8 +16,6 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -47,9 +45,6 @@ public class HomeFragment extends Fragment {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Gson gson = new Gson();
 
-    // UI组件
-    private TextView tvGreeting;
-
     // 登录状态
     private String pendingUser = null;
     private String pendingPass = null;
@@ -69,8 +64,6 @@ public class HomeFragment extends Fragment {
         prefs = requireActivity().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         webView = view.findViewById(R.id.webView);
 
-        initHomeUI(view);
-
         crawlerView = new WebView(requireContext());
         crawlerView.setLayoutParams(new ViewGroup.LayoutParams(0, 0));
         crawlerView.setVisibility(View.GONE);
@@ -86,21 +79,21 @@ public class HomeFragment extends Fragment {
         return view;
     }
 
-    private void initHomeUI(View view) {
-        tvGreeting = view.findViewById(R.id.tv_greeting);
-
-        updateGreeting();
-    }
-
-    private void updateGreeting() {
-        int hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY);
-        String greeting;
-        if (hour >= 5 && hour < 11) greeting = "开启新的一天";
-        else if (hour >= 11 && hour < 13) greeting = "午睡啦";
-        else if (hour >= 13 && hour < 18) greeting = "精力充沛";
-        else if (hour >= 18 && hour < 22) greeting = "可以放松啦";
-        else greeting = "难道你是夜猫子";
-        tvGreeting.setText(greeting);
+    /**
+     * 把一条进度消息推到前端控制面板的实时日志区。
+     *
+     * 必须在主线程执行 evaluateJavascript，而本方法会被 WebView 的
+     * 回调线程调用，所以统一 post 到 mainHandler。
+     */
+    private void appendLog(String msg) {
+        if (msg == null) return;
+        final String safe = msg.replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ");
+        mainHandler.post(() -> {
+            if (webView != null) {
+                webView.evaluateJavascript(
+                        "window.receiveFromAndroid('log', '" + safe + "');", null);
+            }
+        });
     }
 
     private void setupWebView(WebView wv) {
@@ -144,7 +137,7 @@ public class HomeFragment extends Fragment {
     public class FrontBridge {
         @JavascriptInterface
         public void login(String username, String password) {
-            Log.d(TAG, "前台请求登录: " + username);
+            appendLog("收到登录请求，账号 " + username);
             pendingUser = username;
             pendingPass = password;
             mainHandler.post(() -> startCrawl());
@@ -158,11 +151,13 @@ public class HomeFragment extends Fragment {
                 notifyFrontError("请先输入账号密码登录");
                 return;
             }
+            appendLog("刷新课表");
             mainHandler.post(() -> startCrawl());
         }
 
         @JavascriptInterface
         public void relogin() {
+            appendLog("退出登录，清除 Cookie 与账号");
             mainHandler.post(() -> {
                 clearAllData();
                 webView.loadUrl("file:///android_asset/www/index.html");
@@ -187,8 +182,20 @@ public class HomeFragment extends Fragment {
             }
         }
 
+        /**
+         * 打开设置页（原底部导航「我的」）。
+         * 首页顶栏右上角的齿轮图标调用这里。
+         */
+        @JavascriptInterface
+        public void openSettings() {
+            if (isAdded()) {
+                startActivity(new Intent(requireContext(), SettingsActivity.class));
+            }
+        }
+
         @JavascriptInterface
         public void openWeekView(String coursesJson) {
+            // 首页现已内嵌周视图（本周课表按钮），此入口保留兼容旧页面。
             Intent intent = new Intent(requireContext(), WeekViewActivity.class);
             intent.putExtra("courses_json", coursesJson);
             startActivity(intent);
@@ -196,7 +203,7 @@ public class HomeFragment extends Fragment {
 
         @JavascriptInterface
         public void forceRetry() {
-            Log.d(TAG, "手动强制重试");
+            appendLog("手动强制重试");
             retryCount = 0;
             startCrawl();
         }
@@ -208,12 +215,9 @@ public class HomeFragment extends Fragment {
         isCrawling = true;
         hasInjectedLogin = false;
 
-        webView.evaluateJavascript(
-                "document.getElementById('login-page').classList.add('active');" +
-                        "document.getElementById('timetable-page').classList.remove('active');" +
-                        "var tip=document.getElementById('tip');if(tip){tip.className='tip ok';tip.textContent='正在连接教务系统...';}" +
-                        "var btn=document.querySelector('.btn .txt');if(btn)btn.textContent='登录中...';" +
-                        "var spin=document.querySelector('.btn .loading');if(spin)spin.classList.remove('hidden');", null);
+        // 注意：原先这里会去操作 #login-page / #timetable-page / #tip / .btn .txt，
+        // 但新首页已把这些元素换成 login-page / main-page / 日志区，
+        // 那段 JS 属于死代码，已移除。界面状态由前端自己维护。
 
         // 设置超时
         if (timeoutRunnable != null) mainHandler.removeCallbacks(timeoutRunnable);
@@ -226,10 +230,11 @@ public class HomeFragment extends Fragment {
                 // 超时重试
                 if (retryCount < MAX_RETRY) {
                     retryCount++;
-                    Log.w(TAG, "超时，第 " + retryCount + " 次重试...");
+                    appendLog("连接超时，第 " + retryCount + " 次重试…");
                     notifyFrontError("连接超时，正在重试...");
                     mainHandler.postDelayed(() -> retryCrawl(), RETRY_DELAY_MS);
                 } else {
+                    appendLog("连接超时，请检查网络或账号密码");
                     notifyFrontError("连接超时，请检查网络或账号密码");
                 }
             }
@@ -237,7 +242,7 @@ public class HomeFragment extends Fragment {
         mainHandler.postDelayed(timeoutRunnable, 25000);
 
         restoreCookies();
-        Log.d(TAG, "后台开始加载课表页...");
+        appendLog("开始连接教务系统…");
         crawlerView.stopLoading();
         crawlerView.clearHistory();
         crawlerView.loadUrl("https://jwxt.wuyiu.edu.cn/jsxsd/framework/xsMainV_new.htmlx?t1=1");
@@ -247,7 +252,7 @@ public class HomeFragment extends Fragment {
      * 重试爬取（保留Cookie，不重置计数）
      */
     private void retryCrawl() {
-        Log.d(TAG, "执行重试，当前重试次数: " + retryCount);
+        appendLog("执行重试，当前重试次数: " + retryCount);
         isCrawling = true;
         hasInjectedLogin = false;
         restoreCookies();
@@ -267,11 +272,11 @@ public class HomeFragment extends Fragment {
                     Log.d(TAG, "已在登录页处理过，跳过");
                     return;
                 }
-                Log.d(TAG, "后台检测到登录页，启动自动登录...");
+                appendLog("检测到统一认证登录页，准备自动填入账号");
                 hasInjectedLogin = true;
                 view.postDelayed(() -> injectAutoLogin(view), 1000);
             } else if (url.contains("xsMainV_new.htmlx") || url.contains("xsMainV.htmlx")) {
-                Log.d(TAG, "后台到达课表页，准备提取...");
+                appendLog("已进入教务系统主页，准备提取课表");
                 view.postDelayed(() -> injectParser(view), 1500);
             }
         }
@@ -376,6 +381,23 @@ public class HomeFragment extends Fragment {
         }, 10000);
 
         String js = "(function() { try {" +
+                // 教务系统返回的地点文本存在前缀重复，例如：
+                //   瑞樟4瑞樟4-101   体育馆体育馆[篮球场]   屏山7屏山7-403[...]
+                // 判据：存在 k（2 <= k <= len/2）使 s 以「同一前缀连写两遍」开头，
+                // 且重复之后仍有剩余内容（k < len-2k 的约束见下面 break）。
+                // 满足则折叠为  p + s.substring(2k)。
+                // 之所以要求“还有剩余”，是为了不把「A101A101」这种
+                // 本身就是完整房间号的字符串截断成「A101」。
+                "var dedupPrefix = function(s) {" +
+                "    if (!s) return s;" +
+                "    var len = s.length, max = Math.floor(len / 2);" +
+                "    for (var k = 2; k <= max; k++) {" +
+                "        if (len - 2 * k < 1) break;" +
+                "        var p = s.substring(0, k);" +
+                "        if (s.startsWith(p + p)) return p + s.substring(2 * k);" +
+                "    }" +
+                "    return s;" +
+                "};" +
                 "var table = document.querySelector('table.qz-weeklyTable');" +
                 "if (!table) { AndroidBack.onError('未找到课表表格'); return; }" +
                 "var courses = [];" +
@@ -427,7 +449,7 @@ public class HomeFragment extends Fragment {
                 "            courses.push({" +
                 "                name: name," +
                 "                teacher: teacher || '未知教师'," +
-                "                location: location || '未知地点'," +
+                "                location: dedupPrefix(location) || '未知地点'," +
                 "                weekRange: weekRange," +
                 "                dayOfWeek: headers[dayIdx - 1].day," +
                 "                dayDate: headers[dayIdx - 1].date," +
@@ -451,20 +473,21 @@ public class HomeFragment extends Fragment {
 
             // 检查是否解析到有效数据
             boolean hasValidData = false;
+            List<?> courses = null;
             try {
-                List<?> courses = gson.fromJson(json, List.class);
+                courses = gson.fromJson(json, List.class);
                 hasValidData = courses != null && !courses.isEmpty();
             } catch (Exception e) {
                 hasValidData = false;
             }
 
-            // 🔥 解决方案：将 hasValidData 赋值给 final 变量
             final boolean isValid = hasValidData;
+            appendLog("解析得到 " + (courses == null ? 0 : courses.size()) + " 门课程");
 
             // 如果没有有效数据，且未超过重试次数，则重试
             if (!isValid && retryCount < MAX_RETRY) {
                 retryCount++;
-                Log.w(TAG, "解析到空课表，第 " + retryCount + " 次重试...");
+                appendLog("课表为空，第 " + retryCount + " 次重试…");
                 notifyFrontError("获取课表为空，正在重试...");
                 isCrawling = false;
                 hasInjectedLogin = false;
@@ -484,14 +507,14 @@ public class HomeFragment extends Fragment {
                 Log.d(TAG, "已保存账号密码");
             }
 
-            // 🔥 使用 final 变量 isValid
             mainHandler.post(() -> {
                 String escapedJson = json.replace("'", "\\'");
                 webView.evaluateJavascript("window.receiveFromAndroid('courses', '" + escapedJson + "');", null);
+                // 注意：「拿到数据」不等于「拿到有效课表」，两种情况要分开报
                 if (isValid) {
-                    webView.evaluateJavascript("window.receiveFromAndroid('status', '登录成功');", null);
+                    appendLog("课表已更新");
                 } else {
-                    webView.evaluateJavascript("window.receiveFromAndroid('status', '获取课表失败，请重试');", null);
+                    appendLog("未获取到有效课表，请重试");
                 }
             });
         }
@@ -499,6 +522,7 @@ public class HomeFragment extends Fragment {
         @JavascriptInterface
         public void onError(String msg) {
             Log.e(TAG, "后台错误: " + msg);
+            appendLog("解析失败：" + msg);
 
             // 错误时重试
             if (retryCount < MAX_RETRY) {
@@ -530,14 +554,14 @@ public class HomeFragment extends Fragment {
     }
 
     // ==================== 辅助方法 ====================
+    /**
+     * 提示前端出错。
+     *
+     * 注意：新首页没有 #tip 元素，这里只通过日志通道回传，
+     * 同时把登录按钮恢复为可点击状态，避免界面卡在"登录中…"。
+     */
     private void notifyFrontError(String msg) {
-        mainHandler.post(() -> {
-            String escapedMsg = msg.replace("'", "\\'");
-            webView.evaluateJavascript(
-                    "var tip=document.getElementById('tip');if(tip){tip.className='tip err';tip.textContent='" + escapedMsg + "';}" +
-                            "var btn=document.querySelector('.btn .txt');if(btn)btn.textContent='登录教务系统';" +
-                            "var spin=document.querySelector('.btn .loading');if(spin)spin.classList.add('hidden');", null);
-        });
+        appendLog(msg);
     }
 
     private void saveCookies() {

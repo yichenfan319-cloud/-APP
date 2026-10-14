@@ -3,193 +3,291 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>武夷学院课表</title>
+    <title>KipKip</title>
     <style>
         /*
           ============================================================
           设计变量（CSS 自定义属性）
           ------------------------------------------------------------
           所有颜色只在这里定义一次，下面全部用 var(--x) 引用。
-          换配色 / 加品牌色方案只改这一段，不用翻遍整个样式表。
           暗色方案见底部的 prefers-color-scheme 媒体查询。
           ============================================================
         */
         :root {
-            /* 页面与卡片 */
             --page-bg: #f0f2f5;
             --card-bg: #ffffff;
-            --muted: #f8f9fa;
 
-            /* 品牌色与按钮 */
             --primary: #034ea1;
             --primary-active: #6c757d;
             --on-primary: #ffffff;
 
-            /* 文字 */
             --text: #1a2c3e;
             --text-label: #666666;
             --text-muted: #999999;
 
-            /* 输入框 */
             --input-bg: #fafafa;
             --input-bg-focus: #ffffff;
             --input-border: #dddddd;
             --focus-ring: rgba(3, 78, 161, 0.1);
 
-            /* 状态提示 */
-            --ok-bg: #e8f5e9;
-            --ok-text: #2e7d32;
-            --err-bg: #ffebee;
-            --err-text: #c62828;
+            /* 日志控制台 */
+            --log-bg: #10141a;
+            --log-text: #8ce99a;
+            --log-err: #ff8787;
+            --log-warn: #ffd43b;
+
+            /* 课表卡片 */
+            --slot-bg: #eef4fd;
+            --slot-text: #034ea1;
+            --divider: #eef0f3;
+
+            --radius-panel: 18px;
+            --radius-ctl: 12px;
+            --radius-card: 14px;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body { height: 100%; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Roboto', sans-serif;
             background: var(--page-bg);
             color: var(--text);
-            padding: 16px;
+            padding: 12px;
+            /* 三段式布局：顶栏 / 控制面板 / 课表区，课表区占满剩余高度 */
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        .card {
+
+        /* ========== ① 顶栏 ========== */
+        .appbar {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             background: var(--card-bg);
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-            margin-bottom: 16px;
+            border-radius: var(--radius-panel);
+            padding: 12px 18px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }
-        h1 { font-size: 22px; margin-bottom: 20px; text-align: center; color: var(--text); }
-        .input-group {
-            margin-bottom: 16px;
+        .appbar .brand {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            color: var(--text);
         }
-        label {
+        .icon-btn {
+            width: 40px;
+            height: 40px;
+            border: none;
+            background: transparent;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-label);
+            padding: 0;
+            margin: 0;
+        }
+        .icon-btn:active { background: rgba(128,128,128,0.15); }
+        .icon-btn svg { width: 24px; height: 24px; display: block; }
+
+        /* ========== ② 控制面板 ========== */
+        .panel {
+            flex: 0 0 auto;
+            background: var(--card-bg);
+            border-radius: var(--radius-panel);
+            padding: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .tabs { display: flex; gap: 10px; }
+        .tabs button { flex: 1; }
+
+        button {
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 12px 14px;
+            border: none;
+            border-radius: var(--radius-ctl);
+            background: var(--primary);
+            color: var(--on-primary);
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        button:active { opacity: 0.85; }
+        button:disabled { opacity: 0.55; }
+
+        /* 未选中的标签：灰底深字 */
+        button.tab { background: var(--page-bg); color: var(--text-label); }
+        button.tab.active { background: var(--primary); color: var(--on-primary); }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .week-picker {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            background: var(--page-bg);
+            border: 1px solid var(--input-border);
+            border-radius: var(--radius-ctl);
+            padding: 11px 14px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            cursor: pointer;
+        }
+        .week-picker .hint { font-weight: 500; color: var(--text-muted); font-size: 13px; }
+        .week-picker .arrow { color: var(--text-muted); font-size: 12px; }
+        .controls button { flex: 0 0 auto; min-width: 84px; }
+
+        /* 实时日志：固定高度、内部滚动 */
+        .log {
+            margin-top: 10px;
+            height: 150px;
+            overflow-y: auto;
+            background: var(--log-bg);
+            border-radius: var(--radius-ctl);
+            padding: 8px 10px;
+            font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+            font-size: 11px;
+            line-height: 1.5;
+            color: var(--log-text);
+            -webkit-overflow-scrolling: touch;
+        }
+        .log .line { white-space: pre-wrap; word-break: break-word; }
+        .log .line.err { color: var(--log-err); }
+        .log .line.warn { color: var(--log-warn); }
+        .log .ts { opacity: 0.55; margin-right: 4px; }
+
+        /* ========== ③ 课表展示区（按天/按周都在这里） ========== */
+        .board {
+            flex: 1 1 auto;
+            min-height: 0;
+            background: var(--card-bg);
+            border-radius: var(--radius-panel);
+            padding: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .course { display: flex; gap: 12px; padding: 4px 0 14px; }
+        .course + .course {
+            border-top: 1px solid var(--divider);
+            padding-top: 14px;
+        }
+        /* 左侧节次胶囊：两行显示，如「1-2 / 节次」 */
+        .slot {
+            flex: 0 0 58px;
+            align-self: flex-start;
+            background: var(--slot-bg);
+            color: var(--slot-text);
+            border-radius: var(--radius-card);
+            padding: 10px 6px;
+            text-align: center;
+            line-height: 1.15;
+        }
+        .slot .num { font-size: 17px; font-weight: 800; letter-spacing: -0.5px; }
+        .slot .unit { font-size: 11px; font-weight: 600; opacity: 0.75; margin-top: 2px; }
+
+        .course .info { flex: 1 1 auto; min-width: 0; }
+        .course .name {
+            font-size: 18px;
+            font-weight: 800;
+            line-height: 1.25;
+            color: var(--text);
+        }
+        .course .meta {
+            margin-top: 6px;
+            padding-top: 6px;
+            border-top: 1px solid var(--divider);
+            font-size: 14px;
+            color: var(--text-label);
+            line-height: 1.5;
+        }
+
+        .empty {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 14px;
+            padding: 40px 10px;
+        }
+
+        /* ========== 登录页 ========== */
+        .login-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+        .field { margin-bottom: 14px; }
+        .field label {
             display: block;
             font-size: 14px;
             color: var(--text-label);
             margin-bottom: 6px;
             font-weight: 500;
         }
-        input {
+        .field input {
             width: 100%;
             padding: 12px 16px;
             border: 1px solid var(--input-border);
-            border-radius: 12px;
+            border-radius: var(--radius-ctl);
             font-size: 16px;
-            transition: 0.2s;
             background: var(--input-bg);
             color: var(--text);
+            transition: 0.2s;
         }
-        input:focus {
+        .field input:focus {
             outline: none;
             border-color: var(--primary);
             background: var(--input-bg-focus);
             box-shadow: 0 0 0 3px var(--focus-ring);
         }
-        button {
-            width: 100%;
-            padding: 14px;
-            background: var(--primary);
-            color: var(--on-primary);
-            border: none;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: 0.2s;
-            margin-top: 8px;
-        }
-        button:active { opacity: 0.85; }
-        .btn-secondary {
-            background: var(--primary-active);
-            margin-top: 12px;
-        }
-        .tip {
-            margin-top: 16px;
-            padding: 12px;
-            border-radius: 12px;
-            font-size: 14px;
-            text-align: center;
-        }
-        .tip.ok { background: var(--ok-bg); color: var(--ok-text); }
-        .tip.err { background: var(--err-bg); color: var(--err-text); }
-        .hidden { display: none; }
-        .btn-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-bottom: 16px;
-        }
-        .btn-group button {
-            flex: 1;
-            min-width: 70px;
-            margin-top: 0;
-            padding: 10px;
-            font-size: 14px;
-        }
-        .course-list {
-            background: var(--muted);
-            padding: 16px;
-            border-radius: 12px;
-            max-height: 500px;
-            overflow-y: auto;
-            font-size: 14px;
-            line-height: 1.6;
-            white-space: pre-wrap;
-            font-family: monospace;
-        }
-        .loading {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 50%;
-            border-top-color: var(--on-primary);
-            animation: spin 0.8s linear infinite;
-            vertical-align: middle;
-            margin-left: 8px;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .btn .loading { display: none; }
-        button:disabled { opacity: 0.6; }
         .checkbox-row {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-top: 8px;
-            margin-bottom: 8px;
+            margin: 10px 0;
         }
         .checkbox-row label {
             display: flex;
             align-items: center;
             gap: 8px;
-            cursor: pointer;
-            margin-bottom: 0;
-        }
-        .checkbox-row input {
-            width: 18px;
-            height: 18px;
-            margin: 0;
-        }
-        .checkbox-row span {
             font-size: 14px;
             color: var(--text-label);
+            cursor: pointer;
         }
+        .checkbox-row input { width: 18px; height: 18px; margin: 0; }
         .clear-btn {
             background: none;
             border: none;
             color: var(--text-muted);
             font-size: 12px;
             padding: 4px 8px;
-            margin: 0;
             width: auto;
             cursor: pointer;
         }
-        .clear-btn:active { opacity: 0.7; }
+        #loginBtn { width: 100%; margin-top: 4px; }
+        .btn-secondary { background: var(--primary-active); width: 100%; margin-top: 10px; }
+        .loading {
+            display: none;
+            width: 15px;
+            height: 15px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: var(--on-primary);
+            animation: spin 0.8s linear infinite;
+            vertical-align: -2px;
+            margin-left: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hidden { display: none !important; }
 
         /*
           暗色方案：跟随系统。Android 10+ 的 WebView 会自动按系统深色模式
@@ -199,7 +297,6 @@
             :root {
                 --page-bg: #121212;
                 --card-bg: #1e1e1e;
-                --muted: #141414;
 
                 --primary: #1565c0;
                 --primary-active: #4a4a4a;
@@ -214,194 +311,350 @@
                 --input-border: #3a3a3a;
                 --focus-ring: rgba(21, 101, 192, 0.35);
 
-                --ok-bg: #1b3620;
-                --ok-text: #81c995;
-                --err-bg: #3a1f22;
-                --err-text: #f28b82;
-            }
-            .card {
-                box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+                --log-bg: #0b0e12;
+                --slot-bg: #1c3350;
+                --slot-text: #9ec6f5;
+                --divider: #2c2c2c;
             }
         }
     </style>
 </head>
 <body>
-<div class="container">
-    <div class="card" id="login-page">
-        <h1>📖 武夷学院课表</h1>
-        <div class="input-group">
+
+<!-- ========== ① 顶栏：标题 + 设置入口 ========== -->
+<div class="appbar">
+    <div class="brand">KipKip</div>
+    <button class="icon-btn" id="settingsBtn" title="设置" aria-label="设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+    </button>
+</div>
+
+<!-- ========== 登录页（未登录时显示） ========== -->
+<div class="login-wrap" id="login-page">
+    <div class="panel">
+        <div class="field">
             <label>学号</label>
             <input type="text" id="username" placeholder="请输入学号" autocomplete="off">
         </div>
-        <div class="input-group">
+        <div class="field">
             <label>密码</label>
             <input type="password" id="password" placeholder="请输入密码">
         </div>
         <div class="checkbox-row">
             <label>
                 <input type="checkbox" id="rememberCheckbox" checked>
-                <span style="font-size: 14px; color: #666;">记住密码</span>
+                <span>记住密码</span>
             </label>
-            <button id="clearCredentialsBtn" class="clear-btn" style="display: none;">清除记录</button>
+            <button id="clearCredentialsBtn" class="clear-btn" style="display:none;">清除记录</button>
         </div>
         <button id="loginBtn" class="btn">
             <span class="txt">登录教务系统</span>
-            <span class="loading hidden"></span>
+            <span class="loading"></span>
         </button>
-        <div id="tip" class="tip hidden"></div>
     </div>
-
-    <div class="card hidden" id="timetable-page">
-        <h1>我的课表</h1>
-        <div class="btn-group">
-            <button id="todayBtn">今天</button>
-            <button id="tomorrowBtn">明天</button>
-            <button id="weekBtn">本周</button>
-            <button id="refreshBtn">更新</button>
-        </div>
-        <div id="courseContent" class="course-list">加载中...</div>
-        <button id="logoutBtn" class="btn-secondary">切换账号</button>
+    <div class="panel" style="margin-top:12px;">
+        <div class="log" id="loginLog"></div>
     </div>
 </div>
 
+<!-- ========== 主界面（登录后显示） ========== -->
+<div id="main-page" class="hidden" style="flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:12px;">
+
+    <!-- ② 控制面板 -->
+    <div class="panel">
+        <div class="tabs">
+            <button class="tab active" id="todayBtn">今天课表</button>
+            <button class="tab" id="tomorrowBtn">明天课表</button>
+            <button class="tab" id="weekBtn">本周课表</button>
+        </div>
+        <div class="controls">
+            <div class="week-picker" id="weekPicker">
+                <span class="hint">周次选择</span>
+                <span id="weekLabel">第 2 周</span>
+                <span class="arrow">▼</span>
+            </div>
+            <button id="refreshBtn">刷新</button>
+        </div>
+        <div class="log" id="runLog"></div>
+    </div>
+
+    <!-- ③ 课表展示区：按天、按周都在这里 -->
+    <div class="board" id="board"></div>
+
+    <button id="logoutBtn" class="btn-secondary">切换账号</button>
+</div>
+
 <script>
-    // 页面元素
-    const loginPage = document.getElementById('login-page');
-    const timetablePage = document.getElementById('timetable-page');
-    const tipDiv = document.getElementById('tip');
-    const loginBtn = document.getElementById('loginBtn');
+    /* ============================================================
+       元素引用
+       ============================================================ */
+    const loginPage   = document.getElementById('login-page');
+    const mainPage    = document.getElementById('main-page');
+    const loginLog    = document.getElementById('loginLog');
+    const runLog      = document.getElementById('runLog');
+    const loginBtn    = document.getElementById('loginBtn');
     const usernameInput = document.getElementById('username');
     const passwordInput = document.getElementById('password');
     const rememberCheckbox = document.getElementById('rememberCheckbox');
     const clearCredentialsBtn = document.getElementById('clearCredentialsBtn');
-    const todayBtn = document.getElementById('todayBtn');
+    const todayBtn    = document.getElementById('todayBtn');
     const tomorrowBtn = document.getElementById('tomorrowBtn');
-    const weekBtn = document.getElementById('weekBtn');
-    const refreshBtn = document.getElementById('refreshBtn');
-    const logoutBtn = document.getElementById('logoutBtn');
-    const courseContent = document.getElementById('courseContent');
+    const weekBtn     = document.getElementById('weekBtn');
+    const refreshBtn  = document.getElementById('refreshBtn');
+    const logoutBtn   = document.getElementById('logoutBtn');
+    const board       = document.getElementById('board');
+    const weekPicker  = document.getElementById('weekPicker');
 
-    let coursesData = [];
+    const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const DAY_ORDER = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-    // 辅助函数
-    function showTip(msg, isErr = false) {
-        tipDiv.textContent = msg;
-        tipDiv.className = 'tip ' + (isErr ? 'err' : 'ok');
-        tipDiv.classList.remove('hidden');
-        setTimeout(() => {
-            if (tipDiv) tipDiv.classList.add('hidden');
-        }, 4000);
+    // 节次按顺序排列（解析结果里的 timeSlot 就是这些字符串）
+    const SLOT_ORDER = ['第一二节', '第三四节', '第五六节', '第七八节', '第九十节'];
+    // 节次短标签
+    const SLOT_SHORT = {
+        '第一二节': '1-2', '第三四节': '3-4', '第五六节': '5-6',
+        '第七八节': '7-8', '第九十节': '9-10',
+        '第一大节': '1-2', '第二大节': '3-4', '第三大节': '5-6',
+        '第四大节': '7-8', '第五大节': '9-10'
+    };
+
+    /* ============================================================
+       实时日志
+       ------------------------------------------------------------
+       日志行先攒在内存，用 rAF 批量写 DOM，避免爬虫短时间内回传
+       几十条消息时反复触发排版。最多保留 MAX_LOG_LINES 行。
+       ============================================================ */
+    const MAX_LOG_LINES = 120;
+    let pendingLogs = [];
+    let logScheduled = false;
+
+    function currentLogBox() {
+        return mainPage.classList.contains('hidden') ? loginLog : runLog;
+    }
+
+    function pad2(n) { return String(n).padStart(2, '0'); }
+
+    function pushLog(msg, level) {
+        pendingLogs.push({ msg: String(msg), level: level || 'info', t: new Date() });
+        if (!logScheduled) {
+            logScheduled = true;
+            requestAnimationFrame(flushLogs);
+        }
+    }
+
+    function flushLogs() {
+        logScheduled = false;
+        if (pendingLogs.length === 0) return;
+
+        const box = currentLogBox();
+        const frag = document.createDocumentFragment();
+        for (const item of pendingLogs) {
+            const line = document.createElement('div');
+            line.className = 'line' + (item.level === 'info' ? '' : ' ' + item.level);
+            const ts = document.createElement('span');
+            ts.className = 'ts';
+            ts.textContent = pad2(item.t.getHours()) + ':' + pad2(item.t.getMinutes()) + ':' + pad2(item.t.getSeconds());
+            line.appendChild(ts);
+            line.appendChild(document.createTextNode(item.msg));
+            frag.appendChild(line);
+        }
+        box.appendChild(frag);
+        pendingLogs = [];
+
+        while (box.childElementCount > MAX_LOG_LINES) {
+            box.removeChild(box.firstElementChild);
+        }
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function clearLogs() {
+        pendingLogs = [];
+        loginLog.innerHTML = '';
+        runLog.innerHTML = '';
+    }
+
+    /* ============================================================
+       课表渲染
+       ============================================================ */
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function shortSlot(text) {
+        if (!text) return '--';
+        const t = String(text).trim();
+        if (SLOT_SHORT[t]) return SLOT_SHORT[t];
+        const m = t.match(/(\d+)\s*[-–~]\s*(\d+)/);
+        if (m) return m[1] + '-' + m[2];
+        const one = t.match(/(\d+)/);
+        return one ? one[1] : t.substring(0, 4);
+    }
+
+    function sortBySlot(list) {
+        return list.slice().sort(function(a, b) {
+            const ia = SLOT_ORDER.indexOf(a.timeSlot);
+            const ib = SLOT_ORDER.indexOf(b.timeSlot);
+            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        });
+    }
+
+    function courseCardHtml(c) {
+        const slot = shortSlot(c.timeSlot || c.sections);
+        const name = escapeHtml(c.name || '未知课程');
+        const loc  = escapeHtml(String(c.location || '未知地点').replace(/\n/g, ' '));
+        const tea  = escapeHtml(c.teacher || '未知教师');
+        const wk   = escapeHtml(c.weekRange || '');
+        return '' +
+            '<div class="course">' +
+              '<div class="slot"><div class="num">' + escapeHtml(slot) + '</div>' +
+                '<div class="unit">节次</div></div>' +
+              '<div class="info">' +
+                '<div class="name">' + name + '</div>' +
+                '<div class="meta">' + loc + '<br>' + tea +
+                  (wk ? '<br>周次：' + wk : '') +
+                '</div>' +
+              '</div>' +
+            '</div>';
+    }
+
+    function renderCourses(list, emptyText) {
+        if (!list || list.length === 0) {
+            board.innerHTML = '<div class="empty">' + escapeHtml(emptyText) + '</div>';
+            return;
+        }
+        let html = '';
+        for (const c of list) html += courseCardHtml(c);
+        board.innerHTML = html;
+    }
+
+    function courses() { return window.coursesData || []; }
+
+    function setActiveTab(btn) {
+        [todayBtn, tomorrowBtn, weekBtn].forEach(function(b) {
+            b.classList.toggle('active', b === btn);
+        });
+    }
+
+    function weekdayName(offsetDays) {
+        const d = new Date();
+        if (offsetDays) d.setDate(d.getDate() + offsetDays);
+        return WEEKDAYS[d.getDay()];
+    }
+
+    function showToday() {
+        setActiveTab(todayBtn);
+        const day = weekdayName(0);
+        const list = sortBySlot(courses().filter(c => c.dayOfWeek === day));
+        pushLog('筛选 ' + day + '：命中 ' + list.length + ' 门');
+        renderCourses(list, '今天没有课，好好休息吧~');
+    }
+
+    function showTomorrow() {
+        setActiveTab(tomorrowBtn);
+        const day = weekdayName(1);
+        const list = sortBySlot(courses().filter(c => c.dayOfWeek === day));
+        pushLog('筛选 ' + day + '：命中 ' + list.length + ' 门');
+        renderCourses(list, '明天没有课~');
+    }
+
+    function showWeek() {
+        setActiveTab(weekBtn);
+        const all = courses();
+        if (all.length === 0) {
+            board.innerHTML = '<div class="empty">本周暂无课表</div>';
+            return;
+        }
+        let html = '';
+        let total = 0;
+        for (const day of DAY_ORDER) {
+            const list = sortBySlot(all.filter(c => c.dayOfWeek === day));
+            if (list.length === 0) continue;
+            total += list.length;
+            // 周视图每张卡片带上星期，否则一天多节课时无法区分是哪天
+            for (const c of list) {
+                html += courseCardHtml(Object.assign({}, c, {
+                    weekRange: (c.weekRange ? c.weekRange + ' · ' : '') + day
+                }));
+            }
+        }
+        pushLog('周视图：共 ' + total + ' 门');
+        board.innerHTML = html || '<div class="empty">本周暂无课表</div>';
+    }
+
+    /* ============================================================
+       登录态切换
+       ============================================================ */
+    function showLoginPage() {
+        loginPage.classList.remove('hidden');
+        mainPage.classList.add('hidden');
+        clearLogs();
+    }
+
+    function showMainPage() {
+        loginPage.classList.add('hidden');
+        mainPage.classList.remove('hidden');
+        clearLogs();
+        // 注意：这里不要清空 window.coursesData。
+        // 数据在 receiveFromAndroid('courses') 里刚解析好，
+        // 清空会导致紧随其后的 showToday() 筛出 0 门课（曾真实踩过此坑）。
+        // 需要重置数据时，应在切换账号/重新登录时显式清空。
+        board.innerHTML = '<div class="empty">正在获取课表…</div>';
     }
 
     function setLoginBtnLoading(loading) {
         const txt = loginBtn.querySelector('.txt');
         const spin = loginBtn.querySelector('.loading');
         if (loading) {
-            txt.textContent = '登录中...';
-            spin.classList.remove('hidden');
+            txt.textContent = '登录中…';
+            spin.style.display = 'inline-block';
             loginBtn.disabled = true;
         } else {
             txt.textContent = '登录教务系统';
-            spin.classList.add('hidden');
+            spin.style.display = 'none';
             loginBtn.disabled = false;
         }
     }
 
-    // 格式化课表显示
-    function formatCoursesByDay(day) {
-        console.log('formatCoursesByDay 被调用, day:', day);
-        console.log('coursesData:', window.coursesData);
-
-        if (!window.coursesData || window.coursesData.length === 0) {
-            return '暂无课表数据';
-        }
-
-        const dayCourses = window.coursesData.filter(c => c.dayOfWeek === day);
-        console.log('筛选出的课程:', dayCourses);
-
-        if (dayCourses.length === 0) return '今天没有课，好好休息吧~';
-
-        let result = '';
-        const order = ['第一二节', '第三四节', '第五六节', '第七八节', '第九十节'];
-        dayCourses.sort((a, b) => order.indexOf(a.timeSlot) - order.indexOf(b.timeSlot));
-
-        for (let c of dayCourses) {
-            result += `📚 ${c.name}\n`;
-            result += `📍 地点：${c.location}\n`;
-            result += `👨‍🏫 教师：${c.teacher}\n`;
-            result += `⏰ 节次：${c.sections}\n`;
-            result += `📅 周次：${c.weekRange || '全周'}\n`;
-            result += `\n`;
-        }
-        return result;
-    }
-
-    function formatWeekCourses() {
-        if (!coursesData || coursesData.length === 0) return '暂无课表数据';
-        const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-        let result = '';
-        for (let day of weekdays) {
-            const dayCourses = coursesData.filter(c => c.dayOfWeek === day);
-            if (dayCourses.length > 0) {
-                result += `【${day}】\n`;
-                for (let c of dayCourses) {
-                    result += `  ${c.name} @ ${c.location}\n`;
-                }
-                result += '\n';
-            }
-        }
-        return result || '本周暂无课程';
-    }
-
-    function getTodayWeekday() {
-        const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-        const today = new Date();
-        const weekday = weekdays[today.getDay()];
-        console.log('计算得到的今天:', weekday);
-        return weekday;
-    }
-
-    function getTomorrowWeekday() {
-        const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        return weekdays[tomorrow.getDay()];
-    }
-
-    // 接收来自 Android 的消息
+    /* ============================================================
+       与 Android 的契约 —— 这些函数名不能被改动
+       ============================================================ */
     window.receiveFromAndroid = function(type, data) {
-        console.log('收到 Android:', type);
-
         if (type === 'courses') {
+            // 先切换界面（showMainPage 会清空日志），再打诊断信息，
+            // 否则诊断行会被 clearLogs() 冲掉 —— 之前就踩过这个坑。
+            let count = -1;
             try {
-                // 🔥 确保这里正确赋值
                 window.coursesData = JSON.parse(data);
-                console.log('✅ 课表数据已存储，共 ' + window.coursesData.length + ' 门课程');
-
-                // 切换到课表界面
-                loginPage.classList.add('hidden');
-                timetablePage.classList.remove('hidden');
+                count = window.coursesData.length;
                 setLoginBtnLoading(false);
-                showTip('登录成功，课表已加载', false);
-
-                // 🔥 显示今天课表
-                window.requestToday();
-
-            } catch(e) {
-                console.error('解析课表失败:', e);
+                showMainPage();
+            } catch (e) {
+                showMainPage();
+                pushLog('解析课表失败：' + e.message, 'err');
+                return;
             }
+            // 诊断：区分「注入被截断」和「解析结果为空」两种原因
+            pushLog('前端收到 ' + (data == null ? 0 : data.length) + ' 字符，解析出 ' + count + ' 门课程');
+            showToday();
+        } else if (type === 'log') {
+            pushLog(data || '');
+        } else if (type === 'status') {
+            pushLog(data || '');
         } else if (type === 'today') {
-            courseContent.textContent = data || '今天没有课~';
+            board.innerHTML = '<div class="empty">' + escapeHtml(data || '今天没有课~') + '</div>';
         } else if (type === 'tomorrow') {
-            courseContent.textContent = data || '明天没有课~';
+            board.innerHTML = '<div class="empty">' + escapeHtml(data || '明天没有课~') + '</div>';
         } else if (type === 'week') {
-            courseContent.textContent = data || '本周暂无课表';
+            board.innerHTML = '<div class="empty">' + escapeHtml(data || '本周暂无课表') + '</div>';
         } else if (type === 'error') {
-            courseContent.textContent = '错误: ' + data;
-            showTip(data, true);
+            pushLog(data || '发生错误', 'err');
             setLoginBtnLoading(false);
         } else if (type === 'saved_credentials') {
-            // 🔥 接收保存的账号密码，自动填充到输入框
             if (data && data !== 'null') {
                 try {
                     const cred = JSON.parse(data);
@@ -412,10 +665,9 @@
                         }
                         rememberCheckbox.checked = true;
                         clearCredentialsBtn.style.display = 'inline-block';
-                        console.log('已自动填充保存的账号');
                     }
-                } catch(e) {
-                    console.log('解析保存的账号失败:', e);
+                } catch (e) {
+                    // 凭据解析失败不应打断登录流程
                 }
             } else {
                 clearCredentialsBtn.style.display = 'none';
@@ -423,111 +675,77 @@
         }
     };
 
-    // 请求课表
-    window.requestToday = function() {
-        console.log('requestToday 被调用');
-        console.log('coursesData:', window.coursesData);
+    // 保留旧协议入口，同时供按钮复用
+    window.requestToday = showToday;
+    window.requestTomorrow = showTomorrow;
+    window.requestWeek = showWeek;
 
-        if (!window.coursesData || window.coursesData.length === 0) {
-            console.log('coursesData 为空');
-            courseContent.textContent = '暂无课表，请先登录';
-            return;
-        }
-
-        const today = getTodayWeekday();
-        console.log('今天是:', today);
-
-        const result = formatCoursesByDay(today);
-        courseContent.textContent = result || '今天没有课~';
-    };
-
-    window.requestTomorrow = function() {
-        if (!window.coursesData || window.coursesData.length === 0) {
-            courseContent.textContent = '暂无课表，请先登录';
-            return;
-        }
-
-        const tomorrow = getTomorrowWeekday();
-        console.log('明天是:', tomorrow);
-
-        const result = formatCoursesByDay(tomorrow);
-        courseContent.textContent = result || '明天没有课~';
-    };
-
-    window.requestWeek = function() {
-        if (coursesData.length === 0) {
-            courseContent.textContent = '暂无课表，请先登录';
-            return;
-        }
-        const result = formatWeekCourses();
-        courseContent.textContent = result || '本周暂无课表';
-    };
-
-    // 🔥 请求获取保存的账号密码（页面加载时调用）
     window.requestSavedCredentials = function() {
-        if (Android && Android.getSavedCredentials) {
+        if (window.Android && Android.getSavedCredentials) {
             Android.getSavedCredentials();
         }
     };
 
-    // 登录
+    /* ============================================================
+       事件绑定
+       ============================================================ */
     loginBtn.onclick = function() {
-        const username = usernameInput.value.trim();
-        const password = passwordInput.value;
-        if (!username || !password) {
-            showTip('请填写完整的学号和密码', true);
+        const u = usernameInput.value.trim();
+        const p = passwordInput.value;
+        if (!u || !p) {
+            pushLog('请填写完整的学号和密码', 'err');
             return;
         }
         setLoginBtnLoading(true);
-        tipDiv.classList.add('hidden');
-        Android.login(username, password);
+        pushLog('开始登录教务系统…');
+        Android.login(u, p);
     };
 
-    // 🔥 清除记录按钮
     clearCredentialsBtn.onclick = function() {
-        if (Android && Android.clearSavedCredentials) {
+        if (window.Android && Android.clearSavedCredentials) {
             Android.clearSavedCredentials();
             usernameInput.value = '';
             passwordInput.value = '';
             rememberCheckbox.checked = true;
             clearCredentialsBtn.style.display = 'none';
-            showTip('已清除保存的账号密码', false);
+            pushLog('已清除保存的账号密码');
         }
     };
 
-    // 按钮事件
-    todayBtn.onclick = window.requestToday;
-    tomorrowBtn.onclick = window.requestTomorrow;
-    weekBtn.onclick = function() {
-        console.log('本周按钮被点击');
-        if (window.coursesData && window.coursesData.length > 0) {
-            console.log('有课表数据，准备跳转');
-            Android.openWeekView(JSON.stringify(window.coursesData));
-        } else {
-            console.log('没有课表数据');
-            showTip('请先登录获取课表', true);
-        }
-    };
+    todayBtn.onclick    = showToday;
+    tomorrowBtn.onclick = showTomorrow;
+    weekBtn.onclick     = showWeek;
+
     refreshBtn.onclick = function() {
-        courseContent.textContent = '正在更新课表...';
+        pushLog('手动刷新…');
+        board.innerHTML = '<div class="empty">正在更新课表…</div>';
         Android.refresh();
     };
+
     logoutBtn.onclick = function() {
         Android.relogin();
-        loginPage.classList.remove('hidden');
-        timetablePage.classList.add('hidden');
-        coursesData = [];
+        // 切换账号时必须清空课程数据，避免下一个账号看到上一个账号的课表
+        window.coursesData = [];
+        showLoginPage();
         setLoginBtnLoading(false);
-        tipDiv.classList.add('hidden');
-        courseContent.textContent = '';
-        // 重新请求保存的账号密码（填充到输入框）
-        setTimeout(() => {
-            window.requestSavedCredentials();
-        }, 500);
+        setTimeout(function() { window.requestSavedCredentials(); }, 400);
     };
 
-    // 🔥 页面加载完成后，请求保存的账号密码
+    // 周次切换：逻辑待定，先给出明确反馈而不是静默无响应
+    weekPicker.onclick = function() {
+        pushLog('周次切换尚未实现（待确定周次数据来源）', 'warn');
+    };
+
+    document.getElementById('settingsBtn').onclick = function() {
+        if (window.Android && Android.openSettings) {
+            Android.openSettings();
+        } else {
+            pushLog('设置入口不可用', 'err');
+        }
+    };
+
     window.addEventListener('DOMContentLoaded', function() {
+        pushLog('KipKip 已就绪');
         window.requestSavedCredentials();
     });
 </script>

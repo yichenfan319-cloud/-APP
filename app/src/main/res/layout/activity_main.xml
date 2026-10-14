@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  主容器：底部导航栏已移除。
+  个人页（原「我的」）改为顶栏齿轮图标进入 SettingsActivity。
+  整个界面的排布由 assets/www/index.html 负责。
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -6,7 +11,6 @@
     android:orientation="vertical"
     android:background="?attr/colorSurfaceScreen">
 
-    <!-- Fragment 容器 -->
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/nav_host_fragment"
         android:name="androidx.navigation.fragment.NavHostFragment"
@@ -15,19 +19,5 @@
         android:layout_weight="1"
         app:defaultNavHost="true"
         app:navGraph="@navigation/nav_graph" />
-
-    <!-- 底部导航：Material 3 标签栏
-         ⚠ 必须用 BottomNavigationView（具体类），不能用 NavigationBarView：
-         后者是抽象基类，XML 无法实例化，会抛
-         NoSuchMethodException: <init>(Context, AttributeSet) 并在启动时闪退。
-         BottomNavigationView 本身从 Material 1.4 起就是 M3 组件。 -->
-    <com.google.android.material.bottomnavigation.BottomNavigationView
-        android:id="@+id/bottom_navigation"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/colorSurfaceCard"
-        app:itemIconTint="@color/nav_item_tint"
-        app:itemTextColor="@color/nav_item_text"
-        app:menu="@menu/bottom_nav_menu" />
 
 </LinearLayout>

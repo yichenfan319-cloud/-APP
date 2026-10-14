@@ -1,31 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  首页只剩一个 WebView。
+  顶栏、控制面板（今天/明天/本周 + 周次选择 + 刷新 + 实时日志）、
+  课表展示区全部由 assets/www/index.html 渲染。
+  这样按天/按周切换不再需要启动新 Activity。
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:background="?attr/colorSurfaceScreen">
 
-    <!-- ========== 信息栏：问候语 ========== -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="16dp"
-        android:background="?attr/colorPrimary">
-
-        <TextView
-            android:id="@+id/tv_greeting"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="加载中..."
-            android:textColor="@android:color/white"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-
-    </LinearLayout>
-
-    <!-- ========== 课表 WebView ========== -->
     <WebView
         android:id="@+id/webView"
         android:layout_width="match_parent"

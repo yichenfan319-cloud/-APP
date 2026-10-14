@@ -1,12 +1,17 @@
 package com.wuyi.kebiao;
 
 import android.os.Bundle;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.navigation.NavController;
-import androidx.navigation.fragment.NavHostFragment;
-import androidx.navigation.ui.NavigationUI;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
 
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.navigation.fragment.NavHostFragment;
+
+/**
+ * 主容器。
+ *
+ * 底部导航栏已移除：整个首页（顶栏、控制面板、课表展示区）由
+ * assets/www/index.html 渲染，个人页改由 SettingsActivity 承载。
+ * 因此这里只需要托管一个 NavHostFragment。
+ */
 public class MainActivity extends AppCompatActivity {
 
     @Override
@@ -14,13 +19,11 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        BottomNavigationView bottomNav = findViewById(R.id.bottom_navigation);
+        // 导航图由布局里的 app:navGraph 自动加载，这里只确保它可用。
         NavHostFragment navHostFragment = (NavHostFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.nav_host_fragment);
-
         if (navHostFragment != null) {
-            NavController navController = navHostFragment.getNavController();
-            NavigationUI.setupWithNavController(bottomNav, navController);
+            navHostFragment.getNavController();
         }
     }
 }
