@@ -153,7 +153,7 @@
         /* 实时日志：固定高度、内部滚动 */
         .log {
             margin-top: 10px;
-            height: 150px;
+            height: 165px;
             overflow-y: auto;
             background: var(--log-bg);
             border-radius: var(--radius-ctl);
@@ -167,6 +167,8 @@
         .log .line { white-space: pre-wrap; word-break: break-word; }
         .log .line.err { color: var(--log-err); }
         .log .line.warn { color: var(--log-warn); }
+        /* 启动彩蛋：系统级提示的观感 */
+        .log .line.egg { color: var(--log-warn); margin-bottom: 6px; }
         .log .ts { opacity: 0.55; margin-right: 4px; }
 
         /* ========== ③ 课表展示区（按天/按周都在这里） ========== */
@@ -222,6 +224,19 @@
             font-size: 14px;
             padding: 40px 10px;
         }
+
+        /* 周视图里每一天的大标题 */
+        .day-heading {
+            font-size: 15px;
+            font-weight: 800;
+            color: var(--primary);
+            margin: 18px 0 10px;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--primary);
+        }
+        .day-heading:first-child { margin-top: 0; }
+        /* 日标题后的第一张卡片不再需要上边框，避免两份分隔线叠在一起 */
+        .day-heading + .course { border-top: none; padding-top: 0; }
 
         /* ========== 登录页 ========== */
         .login-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -433,6 +448,29 @@
     let pendingLogs = [];
     let logScheduled = false;
 
+    // ---- 启动彩蛋：猫猫头 ----
+    // 放在前端而不是 Java：Java 侧在 onCreateView 推日志会被
+    // showMainPage() -> clearLogs() 冲掉，必须由数据到达时触发。
+    const CAT = [
+        '  /\\_/\\   ',
+        ' ( o.o )  ',
+        '  > ^ <   ',
+        ' /|   |\\  ',
+        '(_|   |_) '
+    ].join('\n');
+
+    /** 把彩蛋写在日志最前面，避免被后到的日志挤到看不见的地方 */
+    function showEasterEgg(box) {
+        const wrap = document.createElement('div');
+        wrap.className = 'line egg';
+        const ts = document.createElement('span');
+        ts.className = 'ts';
+        ts.textContent = 'boot';
+        wrap.appendChild(ts);
+        wrap.appendChild(document.createTextNode(CAT + '\n喵，课表交给我吧 ~'));
+        box.insertBefore(wrap, box.firstChild);
+    }
+
     function currentLogBox() {
         return mainPage.classList.contains('hidden') ? loginLog : runLog;
     }
@@ -592,18 +630,17 @@
         }
         let html = '';
         let total = 0;
+        let shownDays = 0;
         for (const day of DAY_ORDER) {
             const list = sortBySlot(all.filter(c => c.dayOfWeek === day));
             if (list.length === 0) continue;
+            // 每天都给一个大标题，周视图看起来更分明
+            html += '<div class="day-heading">' + escapeHtml(day) + '</div>';
+            shownDays++;
             total += list.length;
-            // 周视图每张卡片带上星期，否则一天多节课时无法区分是哪天
-            for (const c of list) {
-                html += courseCardHtml(Object.assign({}, c, {
-                    weekRange: (c.weekRange ? c.weekRange + ' · ' : '') + day
-                }));
-            }
+            for (const c of list) html += courseCardHtml(c);
         }
-        pushLog('周视图：共 ' + total + ' 门');
+        pushLog('周视图：' + shownDays + ' 天，共 ' + total + ' 门');
         board.innerHTML = html || '<div class="empty">本周暂无课表</div>';
     }
 
@@ -680,6 +717,7 @@
                 } else {
                     // 首次加载：切到主界面（showMainPage 会清空日志）
                     showMainPage();
+                    showEasterEgg(runLog);
                 }
             } catch (e) {
                 showMainPage();
@@ -827,6 +865,9 @@
     };
 
     window.addEventListener('DOMContentLoaded', function() {
+        // 启动彩蛋在登录页就露出来，这样用户一进 App 就能看到完整的猫，
+        // 不必等日志刷屏后去滚动（挂载时自动滚到底会把第一行顶出视野）。
+        showEasterEgg(loginLog);
         pushLog('KipKip 已就绪');
         window.requestSavedCredentials();
     });

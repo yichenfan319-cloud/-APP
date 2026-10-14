@@ -58,6 +58,16 @@ class El {
         if (c instanceof El) { this.children.push(c); this.firstElementChild = this.children[0]; }
         return c;
     }
+    insertBefore(c, ref) {
+        this.nodes.unshift(c);
+        if (c instanceof El) {
+            const i = this.children.indexOf(ref);
+            if (i >= 0) this.children.splice(i, 0, c);
+            else this.children.unshift(c);
+            this.firstElementChild = this.children[0];
+        }
+        return c;
+    }
     removeChild(c) {
         this.nodes = this.nodes.filter(x => x !== c);
         this.children = this.children.filter(x => x !== c);
@@ -184,13 +194,51 @@ for (let d = 0; d < 7; d++) {
 }
 
 say('');
-say('=== 周视图渲染检查 ===');
+say('=== 周视图：每天是否都有大标题 ===');
 try {
     window.requestWeek();
-    const cards = reg('board').innerHTML.match(/class="course"/g) || [];
-    say('  周视图卡片数量: ' + cards.length);
+    const htmlW = reg('board').innerHTML;
+    const headings = htmlW.match(/class="day-heading">([^<]+)</g) || [];
+    say('  日标题数量: ' + headings.length);
+    headings.forEach(function (h) {
+        say('    ' + h.replace(/class="day-heading">/, '').replace(/<$/, ''));
+    });
+    say('  课程卡片数量: ' + (htmlW.match(/class="course"/g) || []).length);
 } catch (e) {
     say('  周视图异常: ' + e.message);
+}
+
+/*
+ * 彩蛋：多行 ASCII 画必须在日志里按原样换行显示。
+ * 背景：appendLog 原先把 \n 替换成空格，会把猫猫头压成一行。
+ */
+say('');
+say('=== 彩蛋：是否真的落在日志区的首行 ===');
+try {
+    // 重新走一遍首次加载流程（会 clearLogs 然后插入彩蛋）
+    window.receiveFromAndroid('courses', JSON.stringify({
+        courses: COURSES, currentWeek: '第七周',
+        weeks: [{ value: '7', label: '第七周' }]
+    }));
+    const box = reg('runLog');
+    const first = box.children[0];
+    if (!first) {
+        say('  !! 日志区为空');
+    } else {
+        const isEgg = String(first.className).indexOf('egg') >= 0;
+        const txt = first.text();
+        say('  首行 class      : ' + first.className);
+        say('  首行含猫        : ' + (txt.indexOf('o.o') >= 0 ? '是' : '否'));
+        say('  首行是彩蛋      : ' + (isEgg ? '是  OK' : '否  !! 期望 class 含 egg'));
+        say('  日志总行数      : ' + box.children.length);
+        say('  首行内容:');
+        txt.split('\n').forEach(function (l) { say('    |' + l); });
+        // 彩蛋后面应紧跟真实的进度日志，确认它没把别的行挤掉
+        const second = box.children[1];
+        say('  第二行          : ' + (second ? second.text().slice(0, 40) : '(无)'));
+    }
+} catch (e) {
+    say('  彩蛋首行测试异常: ' + e.message);
 }
 
 /*

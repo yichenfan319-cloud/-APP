@@ -86,10 +86,16 @@ public class HomeFragment extends Fragment {
      *
      * 必须在主线程执行 evaluateJavascript，而本方法会被 WebView 的
      * 回调线程调用，所以统一 post 到 mainHandler。
+     *
+     * 换行会被保留（转成 \n 转义）：日志区是可滚动控制台，
+     * 多行内容（比如启动彩蛋的猫猫头）需要按原样换行显示。
      */
     private void appendLog(String msg) {
         if (msg == null) return;
-        final String safe = msg.replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ");
+        final String safe = msg.replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\r\n", "\\n")
+                .replace("\n", "\\n");
         mainHandler.post(() -> {
             if (webView != null) {
                 webView.evaluateJavascript(
@@ -702,6 +708,26 @@ public class HomeFragment extends Fragment {
      */
     private static String quoteJs(String s) {
         return JSONObject.quote(s == null ? "" : s);
+    }
+
+    /*
+     * 启动彩蛋（猫猫头）已移到前端 index.html 里的 CAT 常量。
+     *
+     * 原因：在 Java 里 appendLog() 会在 onCreateView 阶段执行，
+     * 而随后 showMainPage() -> clearLogs() 会把它冲掉（日志区实测为空）。
+     * 放在前端由 receiveFromAndroid('courses') 触发，时序才是对的。
+     *
+     * 这里保留原实现作为参考，不要在 Java 侧再调用它。
+     */
+    private static String catArt() {
+        String[] lines = {
+                "  /\\_/\\   ",
+                " ( o.o )  ",
+                "  > ^ <   ",
+                " /|   |\\  ",
+                "(_|   |_) "
+        };
+        return String.join("\n", lines);
     }
 
     /**
