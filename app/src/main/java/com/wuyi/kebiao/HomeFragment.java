@@ -22,10 +22,9 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 
-import java.lang.reflect.Type;
-import java.util.List;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class HomeFragment extends Fragment {
 
@@ -398,6 +397,31 @@ public class HomeFragment extends Fragment {
                 "    }" +
                 "    return s;" +
                 "};" +
+                // 从 item 自身的 detailitem 里取字段。
+                // 注意真实 DOM 结构：<div class="qz-tooltip"> 是 <ul class="courselists">
+                // 的兄弟，不是 <li> 的兄弟，所以 item.nextElementSibling() 恒为 null，
+                // 原来那段 tooltip 读取逻辑从未生效，weekRange / sections 一直是空的。
+                // 这里改为读取 item 下的 qz-hasCourse-detailitem，与 tooltip 里同源。
+                //   '教师：方政蕊'            -> teacher
+                //   '01~02小节'              -> sections（无前缀，靠后缀识别）
+                //   '[1-16周] 星期二'        -> weekRange + dayDate
+                //   '瑞樟4瑞樟4-101'         -> location（前缀重复，走 dedupPrefix）
+                "var parseItemDetails = function(item, course) {" +
+                "    var dets = item.querySelectorAll('div.qz-hasCourse-detailitem');" +
+                "    for (var i = 0; i < dets.length; i++) {" +
+                "        var t = dets[i].textContent.trim();" +
+                "        if (!t) continue;" +
+                "        if (t.indexOf('教师：') === 0) {" +
+                "            if (!course.teacher) course.teacher = t.substring(3);" +
+                "        } else if (/小节$/.test(t)) {" +
+                "            if (!course.sections) course.sections = t;" +
+                "        } else if (t.charAt(0) === '[') {" +
+                "            if (!course.weekRange) course.weekRange = t;" +
+                "        } else if (t.indexOf('：') < 0 && !course.location) {" +
+                "            course.location = t;" +
+                "        }" +
+                "    }" +
+                "};" +
                 "var table = document.querySelector('table.qz-weeklyTable');" +
                 "if (!table) { AndroidBack.onError('未找到课表表格'); return; }" +
                 "var courses = [];" +
@@ -424,42 +448,42 @@ public class HomeFragment extends Fragment {
                 "        items.forEach(function(item) {" +
                 "            var nameDiv = item.querySelector('div.qz-hasCourse-title');" +
                 "            var name = nameDiv ? nameDiv.textContent.trim() : '未知课程';" +
-                "            var tooltip = item.nextElementSibling;" +
-                "            var teacher = '', location = '', weekRange = '', sections = '';" +
-                "            if (tooltip && tooltip.classList.contains('qz-tooltip')) {" +
-                "                var details = tooltip.querySelectorAll('div.qz-tooltipContent-detailitem');" +
-                "                details.forEach(function(div) {" +
-                "                    var text = div.textContent.trim();" +
-                "                    if (text.startsWith('教师：')) teacher = text.replace('教师：', '');" +
-                "                    else if (text.startsWith('上课地点：')) location = text.replace('上课地点：', '');" +
-                "                    else if (text.startsWith('周次：')) weekRange = text.replace('周次：', '');" +
-                "                    else if (text.startsWith('节次：')) sections = text.replace('节次：', '');" +
-                "                });" +
-                "            }" +
-                "            if (!teacher || !location) {" +
-                "                var details2 = item.querySelectorAll('div.qz-hasCourse-detailitem');" +
-                "                details2.forEach(function(div) {" +
-                "                    var text = div.textContent.trim();" +
-                "                    if (text.startsWith('教师：') && !teacher) teacher = text.replace('教师：', '');" +
-                "                    else if (text.startsWith('节次：') && !sections) sections = text.replace('节次：', '');" +
-                "                    else if (text.startsWith('周次：') && !weekRange) weekRange = text.replace('周次：', '');" +
-                "                    else if (!text.endsWith('小节') && !text.startsWith('[') && !location) location = text;" +
-                "                });" +
-                "            }" +
+                // 字段一次性从 item 自身的 detailitem 解析（tooltip 取不到，见上面说明）
+                "            var course = {teacher:'', location:'', weekRange:'', sections:''};" +
+                "            parseItemDetails(item, course);" +
                 "            courses.push({" +
                 "                name: name," +
-                "                teacher: teacher || '未知教师'," +
-                "                location: dedupPrefix(location) || '未知地点'," +
-                "                weekRange: weekRange," +
+                "                teacher: course.teacher || '未知教师'," +
+                "                location: dedupPrefix(course.location) || '未知地点'," +
+                "                weekRange: course.weekRange," +
                 "                dayOfWeek: headers[dayIdx - 1].day," +
+                // dayDate 用表头里的日期（如 10-13）。
+                // 注意不要改用 weekRange 里的「星期二」：那只是"星期几"，
+                // 语义上与 dayOfWeek 重复，且显示时会与"第"字拼出「第10-13」这种怪结果。
                 "                dayDate: headers[dayIdx - 1].date," +
                 "                timeSlot: timeSlot," +
-                "                sections: sections || timeSlot" +
+                "                sections: course.sections || timeSlot" +
                 "            });" +
                 "        });" +
                 "    }" +
                 "});" +
-                "AndroidBack.onCourses(JSON.stringify(courses));" +
+                // 当前周次：教务系统已在页面里算好并选中，直接读，不要自己按开学日期推算。
+                // 优先读 select 的 selected option，其次读 layui 渲染出来的 input value。
+                "var currentWeek = '';" +
+                "var selOpt = document.querySelector('select option[selected]');" +
+                "if (selOpt) currentWeek = selOpt.textContent.trim();" +
+                "if (!currentWeek) {" +
+                "    var sel = document.querySelector('select');" +
+                "    if (sel && sel.options && sel.selectedIndex >= 0) currentWeek = sel.options[sel.selectedIndex].text;" +
+                "}" +
+                "if (!currentWeek) {" +
+                "    var inputs = document.querySelectorAll('input.layui-unselect');" +
+                "    for (var k = 0; k < inputs.length; k++) {" +
+                "        var v = inputs[k].value || '';" +
+                "        if (/第.+周/.test(v)) { currentWeek = v; break; }" +
+                "    }" +
+                "}" +
+                "AndroidBack.onCourses(JSON.stringify({courses: courses, currentWeek: currentWeek}));" +
                 "} catch(e) { AndroidBack.onError(e.message); }" +
                 "})();";
         view.evaluateJavascript(js, null);
@@ -471,18 +495,25 @@ public class HomeFragment extends Fragment {
         public void onCourses(String json) {
             Log.d(TAG, "后台提取成功，JSON长度: " + json.length());
 
-            // 检查是否解析到有效数据
+            // 解析结果结构：
+            //   {"courses":[ {...}, ... ], "currentWeek":"第七周"}
+            // currentWeek 由教务系统页面里已选中的周次直接读出，不自行推算。
             boolean hasValidData = false;
-            List<?> courses = null;
+            int courseCount = 0;
+            String currentWeek = "";
             try {
-                courses = gson.fromJson(json, List.class);
-                hasValidData = courses != null && !courses.isEmpty();
+                JSONObject root = new JSONObject(json);
+                JSONArray arr = root.optJSONArray("courses");
+                courseCount = arr == null ? 0 : arr.length();
+                currentWeek = root.optString("currentWeek", "");
+                hasValidData = courseCount > 0;
             } catch (Exception e) {
                 hasValidData = false;
             }
 
             final boolean isValid = hasValidData;
-            appendLog("解析得到 " + (courses == null ? 0 : courses.size()) + " 门课程");
+            appendLog("解析得到 " + courseCount + " 门课程"
+                    + (currentWeek.isEmpty() ? "" : "，当前" + currentWeek));
 
             // 如果没有有效数据，且未超过重试次数，则重试
             if (!isValid && retryCount < MAX_RETRY) {

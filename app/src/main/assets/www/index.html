@@ -408,6 +408,7 @@
     const logoutBtn   = document.getElementById('logoutBtn');
     const board       = document.getElementById('board');
     const weekPicker  = document.getElementById('weekPicker');
+    const weekLabel   = document.getElementById('weekLabel');
 
     const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
     const DAY_ORDER = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
@@ -628,8 +629,12 @@
             // 先切换界面（showMainPage 会清空日志），再打诊断信息，
             // 否则诊断行会被 clearLogs() 冲掉 —— 之前就踩过这个坑。
             let count = -1;
+            let weekText = '';
             try {
-                window.coursesData = JSON.parse(data);
+                // 载荷结构：{"courses":[...], "currentWeek":"第七周"}
+                const payload = JSON.parse(data);
+                window.coursesData = payload.courses || [];
+                weekText = payload.currentWeek || '';
                 count = window.coursesData.length;
                 setLoginBtnLoading(false);
                 showMainPage();
@@ -637,6 +642,10 @@
                 showMainPage();
                 pushLog('解析课表失败：' + e.message, 'err');
                 return;
+            }
+            // 周次由教务系统页面给出（已自动匹配到当前周），不自行推算
+            if (weekText) {
+                weekLabel.textContent = weekText;
             }
             // 诊断：区分「注入被截断」和「解析结果为空」两种原因
             pushLog('前端收到 ' + (data == null ? 0 : data.length) + ' 字符，解析出 ' + count + ' 门课程');
