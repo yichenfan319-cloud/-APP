@@ -10,8 +10,8 @@ android {
         applicationId = "com.wuyi.kebiao"
         minSdk = 21
         targetSdk = 34
-        versionCode = 10
-        versionName = "2.0.0-beta"
+        versionCode = 12
+        versionName = "2.1.1-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
