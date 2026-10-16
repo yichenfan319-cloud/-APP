@@ -100,7 +100,9 @@ function reg(id) { return registry[id] || (registry[id] = new El(id)); }
 [
     'login-page', 'main-page', 'loginLog', 'runLog', 'loginBtn', 'username', 'password',
     'rememberCheckbox', 'clearCredentialsBtn', 'todayBtn', 'tomorrowBtn', 'weekBtn',
-    'refreshBtn', 'logoutBtn', 'board', 'weekPicker', 'settingsBtn'
+    'refreshBtn', 'logoutBtn', 'board', 'weekPicker', 'weekLabel', 'settingsBtn',
+    // 登录页两种形态
+    'loginForm', 'loginBusy', 'loginBusyText'
 ].forEach(reg);
 
 global.document = {
@@ -261,6 +263,34 @@ try {
  * 这个 bug 只在周日出现，靠人工等一周才发现太慢，
  * 所以这里用假日期直接测判据。
  */
+say('');
+say('=== 回归：查询进行中应收起登录表单 ===');
+try {
+    // 初始应是表单形态
+    window.receiveFromAndroid('loginState', 'form');
+    say('  form  -> loginForm 隐藏? ' + reg('loginForm').classList.contains('hidden')
+        + '   期望 false');
+    say('           loginBusy 隐藏? ' + reg('loginBusy').classList.contains('hidden')
+        + '   期望 true');
+
+    // 查询进行中：收起表单，只留状态行
+    window.receiveFromAndroid('loginState', 'busy');
+    const formHidden = reg('loginForm').classList.contains('hidden');
+    const busyShown = !reg('loginBusy').classList.contains('hidden');
+    say('  busy  -> loginForm 隐藏? ' + formHidden + '   期望 true');
+    say('           loginBusy 显示? ' + busyShown + '   期望 true');
+    say(formHidden && busyShown
+        ? '  ✅ 通过：查询期间不再显示那个禁用的登录按钮'
+        : '  ❌ 失败');
+
+    // 终态失败：表单要回来，否则用户无法重填
+    window.receiveFromAndroid('loginState', 'form');
+    say('  失败后 -> loginForm 隐藏? ' + reg('loginForm').classList.contains('hidden')
+        + '   期望 false（必须让用户能重填）');
+} catch (e) {
+    say('  登录形态测试异常: ' + e.message);
+}
+
 say('');
 say('=== 回归：周日点「明天」必须跨到下一周 ===');
 try {

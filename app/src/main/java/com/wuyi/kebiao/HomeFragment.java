@@ -136,6 +136,10 @@ public class HomeFragment extends Fragment {
             webView.postDelayed(() -> {
                 pendingUser = savedUser;
                 pendingPass = savedPass;
+                // 让登录页收起表单、只留状态行 —— 自动登录期间不该挂着一个
+                // 禁用的"登录教务系统"按钮，日志区已经说明了进度
+                webView.evaluateJavascript(
+                        "window.receiveFromAndroid('loginState', 'busy');", null);
                 startCrawl();
             }, 1000);
         }
@@ -733,11 +737,24 @@ public class HomeFragment extends Fragment {
     /**
      * 提示前端出错。
      *
-     * 注意：新首页没有 #tip 元素，这里只通过日志通道回传，
-     * 同时把登录按钮恢复为可点击状态，避免界面卡在"登录中…"。
+     * 注意：新首页没有 #tip 元素，这里只通过日志通道回传。
+     *
+     * 另外：只有"终态失败"才让登录页恢复表单，重试过程中的中间提示
+     * （如"正在重试…"）不能让表单闪回来 —— 那正是本次要消除的突兀感。
      */
     private void notifyFrontError(String msg) {
         appendLog(msg);
+        final boolean transientRetry = msg != null && msg.contains("重试");
+        final boolean terminal = !transientRetry
+                && msg != null && (msg.contains("失败") || msg.contains("超时"));
+        if (terminal) {
+            mainHandler.post(() -> {
+                if (webView != null) {
+                    webView.evaluateJavascript(
+                            "window.receiveFromAndroid('loginState', 'form');", null);
+                }
+            });
+        }
     }
 
     private void saveCookies() {
