@@ -25,5 +25,11 @@ public class MainActivity extends AppCompatActivity {
         if (navHostFragment != null) {
             navHostFragment.getNavController();
         }
+
+        // 启动时自动检查更新。三道闸门都在 VersionChecker.autoCheck 里：
+        // 设置开关、是否已忽略该版本、请求是否成功。失败静默，不打扰用户。
+        // 放在首帧之后再查，避免和启动动画抢时间。
+        getWindow().getDecorView().postDelayed(
+                () -> VersionChecker.autoCheck(MainActivity.this), 1500);
     }
 }

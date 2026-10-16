@@ -4,4 +4,7 @@
     <!-- 设置页顶部的应用介绍 -->
     <string name="app_intro">KipKip 是一款自动查课 APP，可以帮助你快捷完成课表查询，本地化设计，保护你的隐私安全。</string>
     <string name="creator_name">星辰的网站</string>
+    <!-- 设置页：自动检查更新开关 -->
+    <string name="settings_auto_check">自动检查更新</string>
+    <string name="settings_auto_check_desc">启动时检查是否有新版本</string>
 </resources>

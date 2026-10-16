@@ -144,6 +144,34 @@
 
                 <View style="@style/SettingsDivider" />
 
+                <!-- 自动检查更新：开关行，无箭头（不是跳转项） -->
+                <LinearLayout
+                    android:id="@+id/layout_auto_check"
+                    style="@style/SettingsRow">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/SettingsRowTitle"
+                            android:text="@string/settings_auto_check" />
+
+                        <TextView
+                            style="@style/SettingsRowSubtitle"
+                            android:text="@string/settings_auto_check_desc" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switch_auto_check"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
                 <!-- 问题反馈 -->
                 <LinearLayout
                     android:id="@+id/layout_feedback"
