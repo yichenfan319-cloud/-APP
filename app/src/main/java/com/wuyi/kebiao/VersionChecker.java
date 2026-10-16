@@ -5,7 +5,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.net.Uri;
-import android.widget.TextView;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -21,6 +22,7 @@ import okhttp3.Callback;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * 版本检查与更新提示。
@@ -144,6 +146,19 @@ public final class VersionChecker {
     /* ==================== 网络 ==================== */
 
     private static void fetch(Context c, OnResult callback) {
+        final Context app = c.getApplicationContext();
+        final Handler main = new Handler(Looper.getMainLooper());
+
+        // 关键：所有回调都切回主线程再执行。
+        //
+        // OkHttp 的回调跑在 "OkHttp Dispatcher" 线程上，而那个线程没有 Looper。
+        // 直接在里面 new MaterialAlertDialogBuilder(...) 会抛：
+        //   RuntimeException: Can't create handler inside thread
+        //   Thread[OkHttp ...] that has not called Looper.prepare()
+        // 表现为"一发现新版本就闪退"。
+        // 统一在入口处切线程，showDialog 与 toast 两条路径就都安全了。
+        final OnResult postToMain = r -> main.post(() -> callback.onResult(r));
+
         Request request = new Request.Builder()
                 .url(ProfileFragment.SERVER_BASE_URL + "/api/version")
                 .get()
@@ -151,24 +166,24 @@ public final class VersionChecker {
         new OkHttpClient().newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                callback.onResult(null);
+                postToMain.onResult(null);
             }
 
             @Override
             public void onResponse(@NonNull Call call, @NonNull Response response) {
-                Remote r = null;
+                Remote parsed = null;
                 try {
-                    String body = response.body() == null ? "" : response.body().string();
-                    JSONObject json = new JSONObject(body);
-                    Remote parsed = new Remote();
-                    parsed.versionCode = json.getInt("versionCode");
-                    parsed.versionName = json.optString("versionName", "");
-                    parsed.updateUrl = json.optString("updateUrl", "");
-                    r = parsed;
+                    ResponseBody body = response.body();
+                    JSONObject json = new JSONObject(body == null ? "" : body.string());
+                    Remote r = new Remote();
+                    r.versionCode = json.getInt("versionCode");
+                    r.versionName = json.optString("versionName", "");
+                    r.updateUrl = json.optString("updateUrl", "");
+                    parsed = r;
                 } catch (Exception ignored) {
                     // 解析失败等同于检查失败
                 }
-                callback.onResult(r);
+                postToMain.onResult(parsed);
             }
         });
     }
@@ -176,10 +191,15 @@ public final class VersionChecker {
     /* ==================== 弹窗 ==================== */
 
     private static void showDialog(Context c, Remote r, boolean allowIgnore) {
+        // 带上 versionCode 一起显示。
+        // 只报版本名时，若上游改了 versionCode 却没改 versionName，
+        // 就会出现「当前版本 2.0.0-beta / 最新版本 2.0.0-beta」这种自相矛盾的提示。
+        String current = currentVersionName(c) + "（" + currentVersionCode(c) + "）";
+        String latest = r.versionName + "（" + r.versionCode + "）";
+
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(c)
                 .setTitle("发现新版本 " + r.versionName)
-                .setMessage("当前版本：" + currentVersionName(c)
-                        + "\n最新版本：" + r.versionName);
+                .setMessage("当前版本：" + current + "\n最新版本：" + latest);
 
         // 顺序：neutral（忽略） / negative（稍后） / positive（立即更新）
         if (allowIgnore) {
