@@ -10,7 +10,7 @@ android {
         applicationId = "com.wuyi.kebiao"
         minSdk = 21
         targetSdk = 34
-        versionCode = 11
+        versionCode = 10
         versionName = "2.0.0-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -43,6 +43,7 @@ dependencies {
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.constraintlayout)
+    implementation(libs.recyclerview)
 
     implementation(libs.navigation.fragment)
     implementation(libs.navigation.ui)

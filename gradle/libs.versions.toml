@@ -7,6 +7,7 @@ appcompat = "1.6.1"
 material = "1.12.0"
 constraintlayout = "2.1.4"
 navigation = "2.7.7"
+recyclerview = "1.3.2"
 okhttp = "4.12.0"
 gson = "2.10.1"
 
@@ -20,6 +21,8 @@ espresso-core = { group = "androidx.test.espresso", name = "espresso-core", vers
 appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+# 开源许可页的列表用它渲染（不再把十几条写死在 XML 里）
+recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
 
 # --- 导航（纯 Java 工程，用不带 -ktx 的版本，-ktx 是 Kotlin 扩展包） ---
 navigation-fragment = { group = "androidx.navigation", name = "navigation-fragment", version.ref = "navigation" }

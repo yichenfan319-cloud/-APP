@@ -74,6 +74,10 @@ public class ProfileFragment extends Fragment {
         // 创作者 - 点击跳转浏览器
         view.findViewById(R.id.layout_creator).setOnClickListener(v -> openCreatorWebsite());
 
+        // 开源许可
+        view.findViewById(R.id.layout_license).setOnClickListener(v ->
+                startActivity(new Intent(requireContext(), LicenseActivity.class)));
+
         // ==================== 自动检查更新开关 ====================
         MaterialSwitch autoCheck = view.findViewById(R.id.switch_auto_check);
         // 先设初值再挂监听，否则 setChecked 会触发监听把状态又写回去

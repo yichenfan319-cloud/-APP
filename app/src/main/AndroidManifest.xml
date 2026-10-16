@@ -35,6 +35,12 @@
             android:exported="false"
             android:parentActivityName=".MainActivity" />
 
+        <!-- 开源许可页：由设置页「开源许可」进入 -->
+        <activity
+            android:name=".LicenseActivity"
+            android:exported="false"
+            android:parentActivityName=".SettingsActivity" />
+
         <!-- 周课表独立页面。首页现已支持内嵌周视图，
              此 Activity 暂时保留以防回退需求，后续确认不再使用可删除。 -->
         <activity
