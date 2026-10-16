@@ -28,6 +28,11 @@ DEFAULT_CANDIDATES = [
 
 
 def resolve_html_path():
+    """按 命令行参数 -> 环境变量 -> 常见位置 -> 桌面/下载下递归查找 的顺序定位。
+
+    最后一步是为了抗目录调整：文件被收进 Desktop/课表获取/ 这类子目录后，
+    固定路径就失效了（确实发生过）。
+    """
     if len(sys.argv) > 1:
         return Path(sys.argv[1])
     env = os.environ.get("KB_HTML")
@@ -36,6 +41,13 @@ def resolve_html_path():
     for p in DEFAULT_CANDIDATES:
         if p.exists():
             return p
+    for base in (Path.home() / "Desktop", Path.home() / "Downloads"):
+        if not base.is_dir():
+            continue
+        for depth in ("*", "*/*", "*/*/*"):
+            for hit in base.glob(depth + "/学生端-个人中心.html"):
+                if hit.is_file():
+                    return hit
     return DEFAULT_CANDIDATES[0]
 
 

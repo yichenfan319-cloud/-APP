@@ -583,6 +583,14 @@
     // 因此切周次后若用 payload.currentWeek 覆盖，就会把用户选的周次又改回旧值。
     let chosenWeek = '';
     let chosenWeekAt = 0;
+    // 用户当前选定的周次值（'' 表示「全部」）。刷新时要用它重新加载，
+    // 否则会把用户手动切到的周次刷回服务端的当前周。
+    let selectedWeekValue = '';
+    // 用户选定周次的标签。用作「当前是第几周」的可信锚点 ——
+    // 界面标签可能因服务端写死的 selected 而未同步，用户选择不会。
+    let chosenWeekLabel = '';
+    // 切周次完成后要执行的渲染动作（如周日点「明天」跨周）
+    let _pendingAction = null;
 
     function setActiveTab(btn) {
         [todayBtn, tomorrowBtn, weekBtn].forEach(function(b) {
@@ -590,8 +598,8 @@
         });
     }
 
-    function rerenderCurrentView() {
-        if (currentView === 'tomorrow') showTomorrow();
+    function rerenderCurrentView(weekText) {
+        if (currentView === 'tomorrow') showTomorrow(weekText);
         else if (currentView === 'week') showWeek();
         else showToday();
     }
@@ -600,6 +608,160 @@
         const d = new Date();
         if (offsetDays) d.setDate(d.getDate() + offsetDays);
         return WEEKDAYS[d.getDay()];
+    }
+
+    /** 把周次值/标签里的数字抽出来；"" → NaN（「全部」没有具体周次） */
+    function weekNumberOfValue(v) {
+        if (v === null || v === undefined || String(v).trim() === '') return NaN;
+        return weekNumberOf(String(v));
+    }
+
+    /* ============================================================
+       周次解析与跨周判断
+       ------------------------------------------------------------
+       为什么要有这几个纯函数：原先把「往后推一天」简单地实现成
+       WEEKDAYS[day+1]，完全没有跨周概念。周日那天点「明天课表」会
+       拿本周数据里的「周一」顶上，显示成一周前的课表，而且界面上
+       看不出来。周一到周六都正常，只有周日触发，所以藏得很深。
+
+       把这两个判据写成不依赖 new Date() 的纯函数，是为了能直接
+       用假日期做回归测试 —— 否则只能等到周日才发现坏。
+       ============================================================ */
+
+    // 中文数字 → 阿拉伯数字（周次标签两种写法都要认）
+    const CN_NUM = {
+        '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9,
+        '十': 10, '十一': 11, '十二': 12, '十三': 13, '十四': 14, '十五': 15,
+        '十六': 16, '十七': 17, '十八': 18, '十九': 19, '二十': 20
+    };
+
+    function cnToNumber(s) {
+        if (!s) return NaN;
+        if (Object.prototype.hasOwnProperty.call(CN_NUM, s)) return CN_NUM[s];
+        // 兜底：二十X
+        const m = s.match(/^二十(.)$/);
+        if (m && CN_NUM[m[1]]) return 20 + CN_NUM[m[1]];
+        return NaN;
+    }
+
+    /** 阿拉伯数字 → 中文（仅覆盖周次会用到的 1..29，超出返回 null） */
+    function numberToCn(n) {
+        const CN_D = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+        if (!(n > 0) || n > 29) return null;
+        if (n < 10) return CN_D[n];
+        if (n === 10) return '十';
+        if (n < 20) return '十' + CN_D[n - 10];
+        if (n === 20) return '二十';
+        return '二十' + CN_D[n - 20];
+    }
+
+    /** 从「第七周」/「第7周」里取出周次数字，失败返回 NaN */
+    function weekNumberOf(label) {
+        if (!label) return NaN;
+        const m = String(label).match(/第\s*([0-9]+|[一二三四五六七八九十]+)\s*周/);
+        if (!m) return NaN;
+        const raw = m[1];
+        return /^[0-9]+$/.test(raw) ? parseInt(raw, 10) : cnToNumber(raw);
+    }
+
+    /**
+     * 从周次 + 天数偏移判断是否跨入下一周。
+     * 只有当"今天是周日、目标不是周日"时才跨周 —— 其余情况明天都还在本周。
+     * 返回值用于测试，也在 showTomorrow 里决定是否要先切周次。
+     */
+    function crossesIntoNextWeek(currentDayIdx, targetDayIdx) {
+        if (currentDayIdx !== 0) return false;        // 不是周日，不跨周
+        return targetDayIdx !== 0;                    // 周日的"明天"必然是下周一
+    }
+
+    /**
+     * 「明天」相对当前周次要不要前进 —— 返回 0 或 1。
+     *
+     * 抽成纯函数（传入锚点文本和可覆盖的日期）是为了能用假日期回归：
+     * 这个 bug 只在周日出现，靠人工等一周才发现实在太慢。
+     */
+    function dayOffsetWeeks(anchorText, nowDate) {
+        const d = nowDate || new Date();
+        const todayIdx = d.getDay();          // 0=周日
+        const tomorrowIdx = (todayIdx + 1) % 7;
+        if (!crossesIntoNextWeek(todayIdx, tomorrowIdx)) return 0;
+
+        const cur = weekNumberOf(anchorText);
+        const last = lastWeekNumber();
+        if (!isNaN(cur) && !isNaN(last) && cur >= last) return 0;   // 已到最后一周
+        return 1;
+    }
+
+    /** 可选周次里的最大周次数字 */
+    function lastWeekNumber() {
+        const weeks = window.availableWeeks || [];
+        if (weeks.length === 0) return NaN;
+        return weekNumberOf(weeks[weeks.length - 1].label);
+    }
+
+    /** 判断锚点是否指向最后一周期（用于给出明确提示而不是静默不变） */
+    function anchorIsLastWeek(anchorText) {
+        const cur = weekNumberOf(anchorText);
+        const last = lastWeekNumber();
+        return !isNaN(cur) && !isNaN(last) && cur >= last;
+    }
+
+    /**
+     * 当前周次锚点文本。优先用用户的选择，其次才是界面标签。
+     *
+     * 为什么优先用户选择：周次切换后 <select selected> 不会更新（服务端写死），
+     * 界面上还有防护不去覆盖标签，但「选完立刻刷新/点明天」这类操作
+     * 仍需要一个可信来源。chosenWeekAt 用来避免用户很久前选过的周次
+     * 污染当前判断。
+     */
+    function weekAnchor() {
+        const fresh = chosenWeekAt > 0 && (Date.now() - chosenWeekAt) < 30000;
+        if (fresh && chosenWeekLabel) return chosenWeekLabel;
+        return weekLabel.textContent || '';
+    }
+
+    function weekStepAllowed(text, step) {
+        const cur = weekNumberOf(text);
+        const last = lastWeekNumber();
+        return isNaN(cur) || isNaN(last) || (cur + step) <= last;
+    }
+
+    /**
+     * 从当前周次前进 step 周，返回 {value, label}；越界返回 null。
+     *
+     * 优先在页面回传的 weeks 列表里取，保证 value 与学校的 zc 参数一致；
+     * 列表缺失时退化为「数字 +1」，并尽量沿用同样的标签写法。
+     */
+    function findWeekStep(anchorText, step) {
+        const cur = weekNumberOf(anchorText);
+        const weeks = window.availableWeeks || [];
+
+        if (!isNaN(cur)) {
+            const targetNum = cur + step;
+            for (let i = 0; i < weeks.length; i++) {
+                if (weekNumberOf(weeks[i].label) === targetNum) {
+                    return { value: String(weeks[i].value), label: weeks[i].label };
+                }
+            }
+            if (weeks.length === 0) {
+                const a = numberToCn(targetNum);
+                return {
+                    value: String(targetNum),
+                    label: a ? ('第' + a + '周') : ('第' + targetNum + '周')
+                };
+            }
+            return null;   // 列表里没有这一周（例如超出范围）
+        }
+
+        // 锚点里没有周次（如「全部」）：退化为按当前下标顺移
+        const curVal = String(selectedWeekValue || '');
+        let idx = -1;
+        for (let i = 0; i < weeks.length; i++) {
+            if (String(weeks[i].value) === curVal) { idx = i; break; }
+        }
+        const nextIdx = (idx < 0 ? 0 : idx + step);
+        if (nextIdx < 0 || nextIdx >= weeks.length) return null;
+        return { value: String(weeks[nextIdx].value), label: weeks[nextIdx].label };
     }
 
     function showToday() {
@@ -611,9 +773,45 @@
         renderCourses(list, '今天没有课，好好休息吧~');
     }
 
-    function showTomorrow() {
+    /**
+     * 明天课表。
+     *
+     * 关键点：周日那天「明天」属于下一周。若只按星期几筛选本周数据，
+     * 会把本周周一的课显示成"明天"（一周前的课表），且看不出异常。
+     * 所以跨周时要真的把课表切到下一周，等新数据回来再渲染。
+     *
+     * @param weekText 可选。切换周次后回传的新周次标签，用于按新周次计算。
+     */
+    function showTomorrow(weekText) {
         currentView = 'tomorrow';
         setActiveTab(tomorrowBtn);
+
+        const now = weekText || weekAnchor();
+        const diff = dayOffsetWeeks(now);
+        if (diff > 0) {
+            // 目标周可能超出可选范围（例如已在最后一周期）
+            const target = findWeekStep(now, diff);
+            if (!target) {
+                if (anchorIsLastWeek(now)) {
+                    pushLog('已是最后一周期，明天没有课表可查', 'warn');
+                } else {
+                    pushLog('明天属于下一周，但无法确定下一周的周次，暂不切换', 'warn');
+                }
+                renderCourses([], '明天没有课表~');
+                return;
+            }
+            _pendingAction = 'tomorrow';
+            pushLog('周日，明天属于下一周，切换到「' + target.label + '」…');
+            window._weekChangePending = true;
+            weekLabel.textContent = target.label;
+            chosenWeek = target.label;
+            chosenWeekLabel = target.label;
+            chosenWeekAt = Date.now();
+            selectedWeekValue = String(target.value);
+            Android.selectWeek(String(target.value));
+            return;
+        }
+
         const day = weekdayName(1);
         const list = sortBySlot(courses().filter(c => c.dayOfWeek === day));
         pushLog('筛选 ' + day + '：命中 ' + list.length + ' 门');
@@ -732,7 +930,15 @@
                 }
                 pushLog('前端收到 ' + (data == null ? 0 : data.length) + ' 字符，解析出 ' + count + ' 门课程');
             }
-            rerenderCurrentView();
+
+            // 跨周切换完成后要回到用户原本点的那个视图（例如周日的「明天」）
+            const pending = _pendingAction;
+            _pendingAction = null;
+            if (pending === 'tomorrow') {
+                showTomorrow(weekText || weekAnchor());
+            } else {
+                rerenderCurrentView(weekText);
+            }
         } else if (type === 'log') {
             pushLog(data || '');
         } else if (type === 'status') {
@@ -808,10 +1014,20 @@
     tomorrowBtn.onclick = showTomorrow;
     weekBtn.onclick     = showWeek;
 
+    // 刷新：重新加载"当前所选周"，而不是让服务端把周次拉回它认为的当前周。
+    // selectedWeekValue 由原生周次选择或跨周自动切换写入。
     refreshBtn.onclick = function() {
-        pushLog('手动刷新…');
-        board.innerHTML = '<div class="empty">正在更新课表…</div>';
-        Android.refresh();
+        if (selectedWeekValue !== null && selectedWeekValue !== undefined
+                && selectedWeekValue !== '') {
+            pushLog('刷新当前所选周（' + (chosenWeekLabel || selectedWeekValue) + '）…');
+            board.innerHTML = '<div class="empty">正在更新课表…</div>';
+            window._weekChangePending = true;
+            Android.selectWeek(String(selectedWeekValue));
+        } else {
+            pushLog('手动刷新…');
+            board.innerHTML = '<div class="empty">正在更新课表…</div>';
+            Android.refresh();
+        }
     };
 
     logoutBtn.onclick = function() {
@@ -849,7 +1065,9 @@
     // 原生侧在用户选定周次后调用，再转交给 Android.selectWeek 真正加载
     window.onWeekChosen = function(value, label) {
         chosenWeek = label || '';
+        chosenWeekLabel = label || '';
         chosenWeekAt = Date.now();
+        selectedWeekValue = (value === null || value === undefined) ? '' : String(value);
         window._weekChangePending = true;
         if (label) weekLabel.textContent = label;
         pushLog('请求切换到「' + (label || '全部') + '」…');

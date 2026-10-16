@@ -23,6 +23,9 @@ if (!fs.existsSync(HTML)) {
 const say = console.log.bind(console);
 console.log = () => {};   // 静音页面内部的 console.log
 
+// 与页面同源的星期中文名（getDay(): 0=周日）
+const WEEKDAY_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
 // ---------- 最小 DOM 垫片 ----------
 class El {
     constructor(id) {
@@ -248,9 +251,137 @@ try {
  * 而该属性是服务器渲染时写死的 —— se() 异步加载新表格时不会更新它。
  * 所以用户切到「第一周」后，若用 payload.currentWeek 覆盖，标签会弹回「第七周」。
  */
+/*
+ * 回归测试：周日点「明天课表」必须跨到下一周。
+ *
+ * 真实缺陷：原先「明天」只是把星期几往后推一天
+ * （WEEKDAYS[getDay()+1]），没有跨周概念。周日那天会把本周周一的课
+ * 显示成"明天"，也就是一周前的课表，而且界面上完全看不出来。
+ *
+ * 这个 bug 只在周日出现，靠人工等一周才发现太慢，
+ * 所以这里用假日期直接测判据。
+ */
+say('');
+say('=== 回归：周日点「明天」必须跨到下一周 ===');
+try {
+    let ok = 0, bad = 0;
+    function chk(desc, cond) {
+        if (cond) { ok++; } else { bad++; say('    ❌ ' + desc); }
+    }
+
+    // JS getDay(): 0=周日 1=周一 ... 6=周六
+    chk('周日->周一 应跨周', crossesIntoNextWeek(0, 1) === true);
+    for (let d = 1; d <= 6; d++) {
+        const t = (d + 1) % 7;
+        chk('周' + d + '->周' + t + ' 不应跨周', crossesIntoNextWeek(d, t) === false);
+    }
+    say('  跨周判据: ' + ok + ' 通过 / ' + bad + ' 失败');
+
+    // 2026-10-18 是周日，2026-10-17 是周六
+    const sunday = new Date(2026, 9, 18);
+    const saturday = new Date(2026, 9, 17);
+    say('  假日期: 2026-10-18 是' + WEEKDAY_CN[sunday.getDay()]
+        + '，2026-10-17 是' + WEEKDAY_CN[saturday.getDay()]);
+
+    // 用中文数字造周次列表 —— 真实教务系统页面就是「第七周」这种写法
+    const CN_D = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    function cnWeek(n) {
+        if (n < 10) return '第' + CN_D[n] + '周';
+        if (n === 10) return '第十周';
+        if (n < 20) return '第十' + CN_D[n - 10] + '周';
+        if (n === 20) return '第二十周';
+        return '第二十' + CN_D[n - 20] + '周';
+    }
+    const weeks20 = [];
+    for (let i = 1; i <= 20; i++) weeks20.push({ value: String(i), label: cnWeek(i) });
+    window.availableWeeks = weeks20;
+
+    const cases2 = [
+        ['第七周',  sunday,   1, '周日应前进一周'],
+        ['第十九周', sunday,  1, '周日应前进一周'],
+        ['第二十周', sunday,  0, '已是最后一周，不前进'],
+        ['第七周',  saturday, 0, '周六不跨周']
+    ];
+    say('  --- dayOffsetWeeks（假日期）---');
+    for (const [label, date, want, desc] of cases2) {
+        const got = dayOffsetWeeks(label, date);
+        const pass = got === want;
+        say('    ' + (pass ? 'OK  ' : '!!  ') + label + ' @' + WEEKDAY_CN[date.getDay()]
+            + ' -> ' + got + ' (期望 ' + want + ')  ' + desc);
+        if (!pass) bad++;
+    }
+
+    // 周次解析：中文与阿拉伯数字都要认
+    say('  --- 周次解析 ---');
+    const numCases = [['第七周', 7], ['第7周', 7], ['第一周', 1], ['第十周', 10],
+                      ['第十五周', 15], ['第二十周', 20], ['全部', NaN]];
+    for (const [label, want] of numCases) {
+        const got = weekNumberOf(label);
+        const pass = (isNaN(want) && isNaN(got)) || got === want;
+        if (!pass) bad++;
+        say('    ' + (pass ? 'OK  ' : '!!  ') + label + ' -> ' + got + ' (期望 ' + want + ')');
+    }
+
+    // 下一周定位：正常前进 / 越界返回 null
+    say('  --- 下一周定位 ---');
+    const nxt = findWeekStep('第十九周', 1);
+    const nxtPass = !!nxt && nxt.label === '第二十周';
+    if (!nxtPass) bad++;
+    say('    ' + (nxtPass ? 'OK  ' : '!!  ') + '第十九周 +1 -> '
+        + (nxt ? nxt.label + ' (value=' + nxt.value + ')' : 'null'));
+
+    const over = findWeekStep('第二十周', 1);
+    if (over !== null) bad++;
+    say('    ' + (over === null ? 'OK  ' : '!!  ') + '第二十周 +1 -> '
+        + (over ? over.label : 'null') + '（期望越界为 null）');
+
+    say('');
+    say(bad === 0 ? '  ✅ 周日跨周逻辑全部通过' : '  ❌ 共 ' + bad + ' 项失败');
+} catch (e) {
+    say('  周日跨周测试异常: ' + e.message);
+}
+
+/*
+ * 回归测试：刷新按钮应重新加载"当前所选周"，
+ * 而不是让服务端把它拉回自己认为的当前周。
+ */
+say('');
+say('=== 回归：刷新应加载"当前所选周" ===');
+try {
+    window.receiveFromAndroid('courses', JSON.stringify({
+        courses: COURSES, currentWeek: '第七周',
+        weeks: [{ value: '7', label: '第七周' }, { value: '9', label: '第九周' }]
+    }));
+
+    let calledWith = null;
+    const origSelect = globalThis.Android.selectWeek;
+    globalThis.Android.selectWeek = function (v) { calledWith = v; };
+
+    // 用户切到第九周，然后清掉这次切换自身产生的调用记录
+    window.onWeekChosen('9', '第九周');
+    calledWith = null;
+
+    reg('refreshBtn').onclick();
+    say('  切到第九周后点刷新 -> selectWeek("' + calledWith + '")');
+    say(calledWith === '9'
+        ? '  ✅ 通过：刷新的是所选周次'
+        : '  ❌ 失败：期望 "9"，实际 ' + calledWith);
+
+    globalThis.Android.selectWeek = origSelect;
+} catch (e) {
+    say('  刷新测试异常: ' + e.message);
+}
+
 say('');
 say('=== 回归：切周次后标签不应被陈旧值覆盖 ===');
 try {
+    // 重置上一批测试留下的状态（chosenWeekAt 会影响"是否陈旧"的判断），
+    // 否则初始标签断言会读到污染后的值。
+    chosenWeek = '';
+    chosenWeekLabel = '';
+    chosenWeekAt = 0;
+    selectedWeekValue = '';
+
     const weeks = [
         { value: '1', label: '第一周' },
         { value: '7', label: '第七周' }
