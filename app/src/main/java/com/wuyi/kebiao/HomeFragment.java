@@ -555,7 +555,16 @@ public class HomeFragment extends Fragment {
      */
     private void changeWeek(String weekValue) {
         if (isCrawling) {
-            appendLog("正在忙，请稍后再切换周次");
+            // 明确通知前端"这次切换被拒"，而不是静默返回。
+            // 静默返回时前端会一直挂着"待切周次"状态，下一批旧数据一到
+            // 就会用上一周的数据渲染成"明天"，界面完全看不出异常。
+            appendLog("正在抓取课表，稍后再切换周次");
+            mainHandler.post(() -> {
+                if (webView != null) {
+                    webView.evaluateJavascript(
+                            "window.receiveFromAndroid('weekFailed', '正在抓取课表，请稍后重试');", null);
+                }
+            });
             return;
         }
         isCrawling = true;

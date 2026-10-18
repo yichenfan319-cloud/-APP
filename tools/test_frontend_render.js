@@ -291,6 +291,124 @@ try {
     say('  登录形态测试异常: ' + e.message);
 }
 
+/*
+ * 回归：切周次完成后，渲染"明天"不能再触发一次切周。
+ *
+ * 真实缺陷（周日实测）：receiveFromAndroid 收到新课表后调用
+ * showTomorrow(weekText)，而 showTomorrow 内部又跑了一次跨周判断，
+ * 于是"切到第八周之后，又认为第八周的明天要切第九周"，最终把视图
+ * 渲染成了别的页签（显示"今天没有课"而不是"明天没有课"）。
+ *
+ * 判据：带着 weekText 进来时只渲染，绝不调用 Android.selectWeek。
+ */
+say('');
+say('=== 回归：切周完成后 showTomorrow 不得再次切周 ===');
+try {
+    window.receiveFromAndroid('courses', JSON.stringify({
+        courses: COURSES, currentWeek: '第八周',
+        weeks: [{ value: '7', label: '第七周' },
+                { value: '8', label: '第八周' },
+                { value: '9', label: '第九周' }]
+    }));
+
+    let selectWeekCalls = [];
+    const origSelect2 = globalThis.Android.selectWeek;
+    globalThis.Android.selectWeek = function (v) { selectWeekCalls.push(v); };
+
+    // 模拟"切周完成，带新周次回来"
+    window.showTomorrow('第八周');
+
+    say('  showTomorrow("第八周") 期间 selectWeek 调用次数: ' + selectWeekCalls.length
+        + '  期望 0');
+    say(selectWeekCalls.length === 0
+        ? '  ✅ 通过：只渲染，没有再次切周'
+        : '  ❌ 失败：又触发了切周 -> ' + JSON.stringify(selectWeekCalls));
+
+    // 渲染结果应是"明天"的课，而不是"今天没有课"
+    const boardHtml2 = reg('board').innerHTML;
+    const saysToday = boardHtml2.indexOf('今天没有课') >= 0;
+    say('  显示区出现"今天没有课"?: ' + saysToday + '  期望 false');
+    if (saysToday) say('  ❌ 失败：视图被渲染成了"今天"');
+
+    globalThis.Android.selectWeek = origSelect2;
+} catch (e) {
+    say('  切周重入测试异常: ' + e.message);
+}
+
+say('');
+say('=== 回归：切周被拒时不得用旧数据渲染"明天" ===');
+try {
+    window.receiveFromAndroid('courses', JSON.stringify({
+        courses: COURSES, currentWeek: '第七周',
+        weeks: [{ value: '7', label: '第七周' }, { value: '8', label: '第八周' }]
+    }));
+
+    // 让 selectWeek 什么都不做（模拟原生侧因"正在抓取"而拒绝）
+    const origSelect3 = globalThis.Android.selectWeek;
+    globalThis.Android.selectWeek = function () { /* 被拒，无响应 */ };
+
+    window.showTomorrow();          // 周日场景：会进入切周分支并挂起待办
+    say('  触发后 _pendingAction           : ' + _pendingAction + '  期望 tomorrow');
+
+    // 原生侧明确回报失败
+    window.receiveFromAndroid('weekFailed', '正在抓取课表，请稍后重试');
+    say('  weekFailed 后 _pendingAction    : ' + _pendingAction + '  期望 null');
+    say('  weekFailed 后 _weekChangePending: ' + window._weekChangePending + '  期望 false');
+
+    const logText = reg('runLog').children.map(function (c) {
+        return c.text();
+    }).join('|');
+    const hasErr = logText.indexOf('正在抓取课表') >= 0;
+    say('  日志中出现失败原因              : ' + hasErr + '  期望 true');
+
+    const board3 = reg('board').innerHTML;
+    say(board3.indexOf('今天没有课') >= 0
+        ? '  ❌ 失败：仍被渲染成了"今天"'
+        : '  ✅ 未用旧数据渲染成"今天"');
+
+    globalThis.Android.selectWeek = origSelect3;
+} catch (e) {
+    say('  切周被拒测试异常: ' + e.message);
+}
+
+/*
+ * 回归：连点「明天课表」不得一周一周往后跳。
+ *
+ * 真实缺陷（周日实测）：weekAnchor() 返回的是"当前显示的周次"。
+ * 第一次点：第七周 -> 第八周；第二次点又把"第八周"当基准 -> 第九周。
+ * 「明天」是日期概念，必须相对"真实当前周"（加载时服务端给的）计算。
+ */
+say('');
+say('=== 回归：连点「明天课表」不得连续往后跳周 ===');
+try {
+    chosenWeek = ''; chosenWeekLabel = ''; chosenWeekAt = 0; selectedWeekValue = '';
+
+    window.receiveFromAndroid('courses', JSON.stringify({
+        courses: COURSES, currentWeek: '第七周',
+        weeks: [{ value: '7', label: '第七周' }, { value: '8', label: '第八周' },
+                { value: '9', label: '第九周' }]
+    }));
+    say('  真实当前周 realWeekLabel : ' + realWeekLabel + '  期望 第七周');
+
+    let swCalls = [];
+    const origSw = globalThis.Android.selectWeek;
+    globalThis.Android.selectWeek = function (v) { swCalls.push(v); };
+
+    window.showTomorrow();          // 第一次
+    window.showTomorrow();          // 连点第二次（此时 selectedWeekValue=8）
+    window.showTomorrow();          // 第三次
+
+    say('  连续三次点击触发的切周请求: ' + JSON.stringify(swCalls)
+        + '  期望只请求一次 [\'8\']');
+    say(swCalls.length === 1 && swCalls[0] === '8'
+        ? '  ✅ 通过：不会连续跳周'
+        : '  ❌ 失败：发生了多次切周');
+
+    globalThis.Android.selectWeek = origSw;
+} catch (e) {
+    say('  连点测试异常: ' + e.message);
+}
+
 say('');
 say('=== 回归：周日点「明天」必须跨到下一周 ===');
 try {

@@ -618,6 +618,10 @@
     // 用户选定周次的标签。用作「当前是第几周」的可信锚点 ——
     // 界面标签可能因服务端写死的 selected 而未同步，用户选择不会。
     let chosenWeekLabel = '';
+    // 真实的"当前周"（应用加载时服务端给的周次）。
+    // 「明天」是日期概念，必须相对它计算，而不是相对用户正在浏览的周次 ——
+    // 否则连点「明天课表」会一周一周往后跳（实测：第七周 -> 第八周 -> 第九周）。
+    let realWeekLabel = '';
     // 切周次完成后要执行的渲染动作（如周日点「明天」跨周）
     let _pendingAction = null;
 
@@ -815,7 +819,23 @@
         currentView = 'tomorrow';
         setActiveTab(tomorrowBtn);
 
-        const now = weekText || weekAnchor();
+        // 已经切完周次（带着 weekText 回来）：只渲染，不做跨周判断。
+        // 否则会陷入「切到第八周后，又认为第八周的明天要切第九周」的循环，
+        // 最终把视图渲染成别的页签 —— 周日实测就是这个现象。
+        if (weekText) {
+            renderTomorrow();
+            return;
+        }
+
+        // 已经切完周次（带着 weekText 回来）：只渲染，不做跨周判断。
+        // 否则会陷入「切到第八周后，又认为第八周的明天要切第九周」的循环，
+        // 最终把视图渲染成别的页签 —— 周日实测就是这个现象。
+        if (weekText) {
+            renderTomorrow();
+            return;
+        }
+
+        const now = realWeekLabel || weekAnchor();
         const diff = dayOffsetWeeks(now);
         if (diff > 0) {
             // 目标周可能超出可选范围（例如已在最后一周期）
@@ -829,22 +849,65 @@
                 renderCourses([], '明天没有课表~');
                 return;
             }
+            // 已经在目标周了（例如连点第二下）：直接渲染，不能再往后推一周
+            if (selectedWeekValue !== '' && String(selectedWeekValue) === String(target.value)) {
+                pushLog('已切到「' + target.label + '」，直接显示明天');
+                renderTomorrow();
+                return;
+            }
             _pendingAction = 'tomorrow';
             pushLog('周日，明天属于下一周，切换到「' + target.label + '」…');
-            window._weekChangePending = true;
-            weekLabel.textContent = target.label;
-            chosenWeek = target.label;
-            chosenWeekLabel = target.label;
-            chosenWeekAt = Date.now();
-            selectedWeekValue = String(target.value);
-            Android.selectWeek(String(target.value));
+            switchToWeek(target);
             return;
         }
 
+        renderTomorrow();
+    }
+
+    /** 按「明天」渲染视图。纯渲染，不做任何跨周判断。 */
+    function renderTomorrow() {
         const day = weekdayName(1);
         const list = sortBySlot(courses().filter(c => c.dayOfWeek === day));
         pushLog('筛选 ' + day + '：命中 ' + list.length + ' 门');
         renderCourses(list, '明天没有课~');
+    }
+
+    /**
+     * 发起"切到某一周"的请求。
+     *
+     * 状态同步集中在这里：原先这些 set 语句散落在 showTomorrow 与
+     * onWeekChosen 两处，重复且容易漏，已出过一次视图被渲染成错误页签的问题。
+     *
+     * 另外加了一道超时保险：原生侧可能因为"正在抓取中"而直接拒绝这次切换
+     * （changeWeek 开头就有 isCrawling 守卫）。这种情况下如果不清理待办状态，
+     * 旧数据一到就会用 **上一周的数据** 渲染成"明天"，而界面看不出任何异常。
+     */
+    function switchToWeek(target) {
+        window._weekChangePending = true;
+        weekLabel.textContent = target.label;
+        chosenWeek = target.label;
+        chosenWeekLabel = target.label;
+        chosenWeekAt = Date.now();
+        selectedWeekValue = String(target.value);
+
+        clearSwitchTimeout();
+        window.__switchTimeout = setTimeout(function () {
+            if (_pendingAction === 'tomorrow') {
+                _pendingAction = null;
+                pushLog('切换到「' + target.label + '」超时，请重试', 'err');
+                renderCourses([], '明天没有课表~');
+            }
+        }, 12000);
+
+        Android.selectWeek(String(target.value));
+    }
+
+    /** 清理切周次的超时保险（收到新数据或明确失败时调用） */
+    function clearSwitchTimeout() {
+        if (window.__switchTimeout) {
+            clearTimeout(window.__switchTimeout);
+            window.__switchTimeout = null;
+        }
     }
 
     function showWeek() {
@@ -973,9 +1036,12 @@
             }
 
             if (!isWeekChange) {
-                // 周次由教务系统页面给出（已自动匹配到当前周），不自行推算
+                // 周次由教务系统页面给出（已自动匹配到当前周），不自行推算。
+                // 这里同时记下「真实当前周」：后续点「明天」要相对它计算，
+                // 不能相对用户正在浏览的周次（否则连点会一周一周往后跳）。
                 if (weekText) {
                     weekLabel.textContent = weekText;
+                    realWeekLabel = weekText;
                 }
                 pushLog('前端收到 ' + (data == null ? 0 : data.length) + ' 字符，解析出 ' + count + ' 门课程');
             }
@@ -983,6 +1049,7 @@
             // 跨周切换完成后要回到用户原本点的那个视图（例如周日的「明天」）
             const pending = _pendingAction;
             _pendingAction = null;
+            clearSwitchTimeout();          // 数据已到，撤掉超时保险
             if (pending === 'tomorrow') {
                 showTomorrow(weekText || weekAnchor());
             } else {
@@ -1002,6 +1069,16 @@
             pushLog(data || '发生错误', 'err');
             setLoginBtnLoading(false);
             showLoginForm();
+        } else if (type === 'weekFailed') {
+            // 原生侧拒绝或切换失败（例如正在抓取中）。
+            // 必须清掉待办动作，否则下一批旧数据会被渲染成"明天"。
+            clearSwitchTimeout();
+            window._weekChangePending = false;
+            if (_pendingAction === 'tomorrow') {
+                _pendingAction = null;
+                renderCourses([], '明天没有课表~');
+            }
+            pushLog(data || '切换周次失败', 'err');
         } else if (type === 'loginState') {
             // 原生侧通知：表单收起 / 恢复（查询进行中 vs 失败需重填）
             if (String(data) === 'busy') showLoginBusy();
