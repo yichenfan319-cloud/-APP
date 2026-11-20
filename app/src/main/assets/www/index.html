@@ -643,6 +643,97 @@
         return WEEKDAYS[d.getDay()];
     }
 
+    /* ============================================================
+       按日期取课（纯本地计算）
+       ------------------------------------------------------------
+       数据侧一次拿全学期：每门课带 dayIndex（列位置）和结构化周次
+       （kind/from/to/list）。于是"今天/明天/本周/某一周"都只是算术。
+
+       原来跨周要靠"判断今天是周日 → 切到下一周 → 等新数据回来"，
+       这条链上任何一环出错都会静默显示错课表（周日实测真出过）。
+       现在只要把日期加一天，周次自然跟着变，不存在时序问题。
+       ============================================================ */
+
+    // 用户正在浏览第几周。0 表示跟随服务端当前周。
+    let viewingWeek = 0;
+
+    // 最近一次载荷的元数据（当前周、第一周周一、表头）
+    let snapshot = null;
+
+    /** "2026-08-31" → 本地时区当天 00:00 的 Date；非法返回 null */
+    function parseIsoDate(s) {
+        const m = String(s || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (!m) return null;
+        return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    }
+
+    function startOfDay(d) {
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+
+    function addDays(d, n) {
+        const x = startOfDay(d);
+        x.setDate(x.getDate() + n);
+        return x;
+    }
+
+    /** Date.getDay 是周日=0，课表列是周一=1..周日=7 */
+    function jsDayToIndex(jsDay) {
+        return jsDay === 0 ? 7 : jsDay;
+    }
+
+    /**
+     * 某日期属于第几周。
+     *
+     * 用服务端给的第一周周一做基准，而不是自己猜学期起点 ——
+     * 学期的第一周不一定是 9 月 1 日那一周，猜错会让整学期的周次整体偏移。
+     */
+    function weekOfDate(date) {
+        if (!snapshot || !snapshot.firstMonday) return NaN;
+        const fm = parseIsoDate(snapshot.firstMonday);
+        if (!fm) return NaN;
+        const days = Math.round((startOfDay(date) - fm) / 86400000);
+        return Math.floor(days / 7) + 1;
+    }
+
+    /**
+     * 这门课在 week 周是否要上。
+     *
+     * 按结构化字段判断，而不是拿显示文本去反解 —— "1-16双周"这种
+     * 形态用字符串判断很容易被当成"每周都上"，真实踩过这个坑。
+     */
+    function weekContains(c, week) {
+        if (isNaN(week)) return true;
+        const kind = c.weekKind || 'ALL';
+        const from = (c.weekFrom === undefined || c.weekFrom === null) ? 1 : c.weekFrom;
+        const to = (c.weekTo === undefined || c.weekTo === null) ? 30 : c.weekTo;
+        const inRange = week >= from && week <= to;
+        switch (kind) {
+            case 'ALL':   return true;
+            case 'RANGE': return inRange;
+            case 'EVEN':  return inRange && week % 2 === 0;
+            case 'ODD':   return inRange && week % 2 === 1;
+            case 'LIST':  return (c.weekList || []).indexOf(week) >= 0;
+            default:      return true;
+        }
+    }
+
+    /** 某一天实际要上的课（自动按该天所属周次过滤） */
+    function coursesOnDate(date) {
+        const idx = jsDayToIndex(date.getDay());
+        const week = weekOfDate(date);
+        return sortBySlot(courses().filter(function(c) {
+            return c.dayIndex === idx && weekContains(c, week);
+        }));
+    }
+
+    /** 周视图当前展示的周次 */
+    function viewedWeek() {
+        if (viewingWeek > 0) return viewingWeek;
+        return snapshot ? snapshot.currentWeek : NaN;
+    }
+
+
     /** 把周次值/标签里的数字抽出来；"" → NaN（「全部」没有具体周次） */
     function weekNumberOfValue(v) {
         if (v === null || v === undefined || String(v).trim() === '') return NaN;
@@ -800,76 +891,39 @@
     function showToday() {
         currentView = 'today';
         setActiveTab(todayBtn);
-        const day = weekdayName(0);
-        const list = sortBySlot(courses().filter(c => c.dayOfWeek === day));
-        pushLog('筛选 ' + day + '：命中 ' + list.length + ' 门');
+        const now = new Date();
+        const week = weekOfDate(now);
+        const list = coursesOnDate(now);
+        pushLog('筛选 ' + weekdayName(0) + weekSuffix(week) + '：命中 ' + list.length + ' 门');
         renderCourses(list, '今天没有课，好好休息吧~');
+    }
+
+    /** 日志里用的"（第N周）"后缀；周次未知时返回空串 */
+    function weekSuffix(week) {
+        return isNaN(week) ? '' : '（第 ' + week + ' 周）';
     }
 
     /**
      * 明天课表。
      *
-     * 关键点：周日那天「明天」属于下一周。若只按星期几筛选本周数据，
-     * 会把本周周一的课显示成"明天"（一周前的课表），且看不出异常。
-     * 所以跨周时要真的把课表切到下一周，等新数据回来再渲染。
-     *
-     * @param weekText 可选。切换周次后回传的新周次标签，用于按新周次计算。
+     * 关键点：周日的「明天」属于下一周。现在直接对日期 +1 天，
+     * 再按那一天的周次过滤 —— 跨周是算出来的，不是"猜"出来的。
+     * 旧实现要走「判断周日 → 请求切周 → 等新数据 → 再渲染」，
+     * 中间任何一步失败都会把上周的课当明天显示。
      */
-    function showTomorrow(weekText) {
+    function showTomorrow() {
         currentView = 'tomorrow';
         setActiveTab(tomorrowBtn);
-
-        // 已经切完周次（带着 weekText 回来）：只渲染，不做跨周判断。
-        // 否则会陷入「切到第八周后，又认为第八周的明天要切第九周」的循环，
-        // 最终把视图渲染成别的页签 —— 周日实测就是这个现象。
-        if (weekText) {
-            renderTomorrow();
-            return;
-        }
-
-        // 已经切完周次（带着 weekText 回来）：只渲染，不做跨周判断。
-        // 否则会陷入「切到第八周后，又认为第八周的明天要切第九周」的循环，
-        // 最终把视图渲染成别的页签 —— 周日实测就是这个现象。
-        if (weekText) {
-            renderTomorrow();
-            return;
-        }
-
-        const now = realWeekLabel || weekAnchor();
-        const diff = dayOffsetWeeks(now);
-        if (diff > 0) {
-            // 目标周可能超出可选范围（例如已在最后一周期）
-            const target = findWeekStep(now, diff);
-            if (!target) {
-                if (anchorIsLastWeek(now)) {
-                    pushLog('已是最后一周期，明天没有课表可查', 'warn');
-                } else {
-                    pushLog('明天属于下一周，但无法确定下一周的周次，暂不切换', 'warn');
-                }
-                renderCourses([], '明天没有课表~');
-                return;
-            }
-            // 已经在目标周了（例如连点第二下）：直接渲染，不能再往后推一周
-            if (selectedWeekValue !== '' && String(selectedWeekValue) === String(target.value)) {
-                pushLog('已切到「' + target.label + '」，直接显示明天');
-                renderTomorrow();
-                return;
-            }
-            _pendingAction = 'tomorrow';
-            pushLog('周日，明天属于下一周，切换到「' + target.label + '」…');
-            switchToWeek(target);
-            return;
-        }
-
-        renderTomorrow();
+        const tmr = addDays(new Date(), 1);
+        const week = weekOfDate(tmr);
+        const list = coursesOnDate(tmr);
+        pushLog('筛选 ' + weekdayName(1) + weekSuffix(week) + '：命中 ' + list.length + ' 门');
+        renderCourses(list, '明天没有课~');
     }
 
-    /** 按「明天」渲染视图。纯渲染，不做任何跨周判断。 */
+    /** 兼容旧调用点：只负责按「明天」重绘 */
     function renderTomorrow() {
-        const day = weekdayName(1);
-        const list = sortBySlot(courses().filter(c => c.dayOfWeek === day));
-        pushLog('筛选 ' + day + '：命中 ' + list.length + ' 门');
-        renderCourses(list, '明天没有课~');
+        showTomorrow();
     }
 
     /**
@@ -913,25 +967,43 @@
     function showWeek() {
         currentView = 'week';
         setActiveTab(weekBtn);
-        const all = courses();
-        if (all.length === 0) {
-            board.innerHTML = '<div class="empty">本周暂无课表</div>';
+        if (courses().length === 0) {
+            board.innerHTML = '<div class="empty">暂无课表</div>';
             return;
         }
+        const week = viewedWeek();
         let html = '';
         let total = 0;
         let shownDays = 0;
-        for (const day of DAY_ORDER) {
-            const list = sortBySlot(all.filter(c => c.dayOfWeek === day));
+        for (let i = 0; i < DAY_ORDER.length; i++) {
+            const day = DAY_ORDER[i];
+            const idx = i + 1;                      // 周一=1 .. 周日=7，与后端 dayIndex 一致
+            const list = sortBySlot(courses().filter(function(c) {
+                return c.dayIndex === idx && weekContains(c, week);
+            }));
             if (list.length === 0) continue;
             // 每天都给一个大标题，周视图看起来更分明
-            html += '<div class="day-heading">' + escapeHtml(day) + '</div>';
+            html += '<div class="day-heading">' + escapeHtml(day) + dayDateSuffix(idx) + '</div>';
             shownDays++;
             total += list.length;
             for (const c of list) html += courseCardHtml(c);
         }
-        pushLog('周视图：' + shownDays + ' 天，共 ' + total + ' 门');
-        board.innerHTML = html || '<div class="empty">本周暂无课表</div>';
+        const w = isNaN(week) ? '?' : week;
+        pushLog('第 ' + w + ' 周：' + shownDays + ' 天，共 ' + total + ' 门');
+        board.innerHTML = html || '<div class="empty">第 ' + w + ' 周没有课</div>';
+    }
+
+    /**
+     * 日标题后的日期（如「· 11-18」）。
+     *
+     * 只在该周就是服务端给的当前周时才显示 —— 表头日期是服务端为
+     * "当前周"算好的，切到别的周时它并不更新，硬套上去会给出错误日期。
+     */
+    function dayDateSuffix(dayIndex) {
+        if (!snapshot || !snapshot.currentWeek) return '';
+        if (viewedWeek() !== snapshot.currentWeek) return '';
+        const d = (snapshot.days || [])[dayIndex - 1];
+        return (d && d.date) ? ' · ' + d.date : '';
     }
 
     /* ============================================================
@@ -993,68 +1065,47 @@
        ============================================================ */
     window.receiveFromAndroid = function(type, data) {
         if (type === 'courses') {
-            // 载荷结构：{"courses":[...], "currentWeek":"第七周", "weeks":[{value,label},...]}
-            let count = -1;
+            // 载荷结构（mode=offline）：
+            //   { "courses":[...], "currentWeek":12, "currentWeekLabel":"第 12 周",
+            //     "firstMonday":"2026-08-31", "weeks":[{value,label}],
+            //     "days":[{name,date}] }
+            // courses 是整个学期的课，不是某一周 —— 按周过滤在前端本地完成。
+            let count = 0;
             let weekText = '';
-            let isWeekChange = false;
             try {
                 const payload = JSON.parse(data);
-                // 切换周次时不要清空日志、也不要重置界面，
-                // 否则用户看不到"周次加载完成"这类过程信息。
-                isWeekChange = window._weekChangePending === true;
-                window._weekChangePending = false;
-
+                snapshot = {
+                    currentWeek: payload.currentWeek || 0,
+                    firstMonday: payload.firstMonday || '',
+                    days: payload.days || [],
+                    weeks: payload.weeks || []
+                };
                 window.coursesData = payload.courses || [];
                 window.availableWeeks = payload.weeks || [];
-                weekText = payload.currentWeek || '';
+                viewingWeek = snapshot.currentWeek;     // 默认回到服务端当前周
+                weekText = payload.currentWeekLabel || '';
                 count = window.coursesData.length;
-
                 setLoginBtnLoading(false);
-                if (isWeekChange) {
-                    // 保留日志，只更新周次标签并重绘当前视图
-                    // 注意：这里不要用 weekText 覆盖标签。
-                    // 该值是服务端渲染时写死的 <select selected>，切周次后仍是旧值，
-                    // 会刚把用户选的「第一周」改回「第七周」。
-                    // 标签已在 onWeekChosen() 里按用户选择更新过。
-                    const stale = chosenWeekAt > 0 && (Date.now() - chosenWeekAt) < 30000;
-                    if (!stale && weekText) weekLabel.textContent = weekText;
-                    pushLog('周次已切换，共 ' + count + ' 门课程');
-                    // 服务端周次与实际不符时提醒一次，便于日后排查
-                    if (stale && weekText && weekText !== weekLabel.textContent) {
-                        pushLog('提示：页面标题仍为「' + weekText + '」，以你选择的「'
-                            + weekLabel.textContent + '」为准', 'warn');
-                    }
-                } else {
-                    // 首次加载：切到主界面（showMainPage 会清空日志）
-                    showMainPage();
-                    showEasterEgg(runLog);
-                }
+                window._weekChangePending = false;
             } catch (e) {
                 showMainPage();
                 pushLog('解析课表失败：' + e.message, 'err');
                 return;
             }
 
-            if (!isWeekChange) {
-                // 周次由教务系统页面给出（已自动匹配到当前周），不自行推算。
-                // 这里同时记下「真实当前周」：后续点「明天」要相对它计算，
-                // 不能相对用户正在浏览的周次（否则连点会一周一周往后跳）。
-                if (weekText) {
-                    weekLabel.textContent = weekText;
-                    realWeekLabel = weekText;
-                }
-                pushLog('前端收到 ' + (data == null ? 0 : data.length) + ' 字符，解析出 ' + count + ' 门课程');
+            if (weekText) {
+                weekLabel.textContent = weekText;
+                realWeekLabel = weekText;
             }
 
-            // 跨周切换完成后要回到用户原本点的那个视图（例如周日的「明天」）
-            const pending = _pendingAction;
-            _pendingAction = null;
-            clearSwitchTimeout();          // 数据已到，撤掉超时保险
-            if (pending === 'tomorrow') {
-                showTomorrow(weekText || weekAnchor());
-            } else {
-                rerenderCurrentView(weekText);
+            showMainPage();
+            showEasterEgg(runLog);
+            pushLog('前端收到 ' + (data == null ? 0 : data.length) + ' 字符，'
+                + '解析出 ' + count + ' 门课程');
+            if (snapshot.currentWeek > 0) {
+                pushLog('今天是第 ' + snapshot.currentWeek + ' 周，切周次无需重新联网');
             }
+            rerenderCurrentView();
         } else if (type === 'log') {
             pushLog(data || '');
         } else if (type === 'status') {
@@ -1146,20 +1197,13 @@
     tomorrowBtn.onclick = showTomorrow;
     weekBtn.onclick     = showWeek;
 
-    // 刷新：重新加载"当前所选周"，而不是让服务端把周次拉回它认为的当前周。
-    // selectedWeekValue 由原生周次选择或跨周自动切换写入。
+    // 刷新：真正去教务系统重新取一次数据。
+    // 周次不需要跟着刷新 —— 数据一次拿全学期，用户正在看哪一周保存在本地，
+    // 新数据回来后会继续按那个周次重绘。
     refreshBtn.onclick = function() {
-        if (selectedWeekValue !== null && selectedWeekValue !== undefined
-                && selectedWeekValue !== '') {
-            pushLog('刷新当前所选周（' + (chosenWeekLabel || selectedWeekValue) + '）…');
-            board.innerHTML = '<div class="empty">正在更新课表…</div>';
-            window._weekChangePending = true;
-            Android.selectWeek(String(selectedWeekValue));
-        } else {
-            pushLog('手动刷新…');
-            board.innerHTML = '<div class="empty">正在更新课表…</div>';
-            Android.refresh();
-        }
+        pushLog('手动刷新…');
+        board.innerHTML = '<div class="empty">正在更新课表…</div>';
+        Android.refresh();
     };
 
     logoutBtn.onclick = function() {
@@ -1194,16 +1238,15 @@
         }
     };
 
-    // 原生侧在用户选定周次后调用，再转交给 Android.selectWeek 真正加载
+    // 原生侧在用户选定周次后调用。数据已在本地，直接过滤重绘，不再联网。
     window.onWeekChosen = function(value, label) {
-        chosenWeek = label || '';
+        const v = parseInt(value, 10);
+        if (!isNaN(v) && v > 0) viewingWeek = v;
         chosenWeekLabel = label || '';
-        chosenWeekAt = Date.now();
         selectedWeekValue = (value === null || value === undefined) ? '' : String(value);
-        window._weekChangePending = true;
         if (label) weekLabel.textContent = label;
-        pushLog('请求切换到「' + (label || '全部') + '」…');
-        Android.selectWeek(value || '');
+        pushLog('切换到「' + (label || '全部') + '」，本地过滤');
+        rerenderCurrentView();
     };
 
     document.getElementById('settingsBtn').onclick = function() {

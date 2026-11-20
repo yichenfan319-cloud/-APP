@@ -10,8 +10,8 @@ android {
         applicationId = "com.wuyi.kebiao"
         minSdk = 21
         targetSdk = 34
-        versionCode = 12
-        versionName = "2.1.1-beta"
+        versionCode = 13
+        versionName = "2.1.2-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -50,6 +50,9 @@ dependencies {
 
     implementation(libs.okhttp)
     implementation(libs.gson)
+    // jsoup：教务系统返回的课表是一个表格片段，用 DOM 解析比正则可靠得多，
+    // 而且是纯 Java 实现，可以直接在 JVM 单元测试里跑，不用开模拟器。
+    implementation(libs.jsoup)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

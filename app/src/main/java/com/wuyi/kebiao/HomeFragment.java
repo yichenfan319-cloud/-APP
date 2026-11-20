@@ -57,6 +57,11 @@ public class HomeFragment extends Fragment {
     // 是否正在等待"切换周次"后的新课表（用于区分首次加载与切周次）
     private boolean changeWeekPending = false;
 
+    // 后台桥接对象。保留引用是因为新的 HTTP 取数线程拿到数据后，要复用
+    // onCourses() 里那套（保存凭据 -> 推前端 -> 记日志）的统一收尾逻辑，
+    // 否则两条数据通路会各自维护一份，迟早走岔。
+    private final BackBridge backBridge = new BackBridge();
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -126,7 +131,7 @@ public class HomeFragment extends Fragment {
             }
         });
         crawlerView.setWebViewClient(new CrawlerClient());
-        crawlerView.addJavascriptInterface(new BackBridge(), "AndroidBack");
+        crawlerView.addJavascriptInterface(backBridge, "AndroidBack");
     }
 
     private void autoLoginIfCredentialsExist() {
@@ -211,8 +216,10 @@ public class HomeFragment extends Fragment {
          */
         @JavascriptInterface
         public void selectWeek(String weekValue) {
-            final String v = (weekValue == null) ? "" : weekValue.trim();
-            mainHandler.post(() -> changeWeek(v));
+            // 新架构下"切周次"完全在前端本地完成（一次拿全学期），
+            // 这里保留 JS 接口只为兼容旧页面，不再触发任何网络请求。
+            // 保留而不删除，是因为旧版 index.html 缓存里可能仍会调用它。
+            Log.d(TAG, "selectWeek 被调用（已改为本地过滤，忽略）: " + weekValue);
         }
 
         /**
@@ -300,6 +307,173 @@ public class HomeFragment extends Fragment {
         crawlerView.loadUrl("https://jwxt.wuyiu.edu.cn/jsxsd/framework/xsMainV_new.htmlx?t1=1");
     }
 
+    // ==================== 接口取数（替代注入脚本） ====================
+
+    /**
+     * 用登录后的 Cookie 直接请求课表接口。
+     *
+     * <p>为什么换掉原来的注入方案：
+     * <ul>
+     *   <li>注入方案要赌"页面 DOM 什么时候变成我们要的样子"，因此不得不靠
+     *       MutationObserver + 6 秒 + 15 秒两级兜底；任何一次时序错位都会
+     *       把上一周的数据当成这一周渲染出来，而界面看不出异常。</li>
+     *   <li>接口返回的是同一张表的 HTML 原文，解析结果只取决于内容本身。</li>
+     *   <li>切周次不再需要发起新的页面请求 —— 一次拿全学期，本地过滤。</li>
+     * </ul>
+     */
+    /**
+     * 收集登录所需的全部 Cookie。
+     *
+     * <p>必须同时取两个域：单点登录会在 sso 域下发 SESSION / SOURCEID_TGC，
+     * 而 jsessionid 落在 jwxt 域。只取 jwxt 域会拿到"看起来有 Cookie、
+     * 服务器却认为未登录"的半套凭据 —— 实测就是这么失败的。
+     *
+     * <p>按 cookie 名去重：两域可能有同名 key，重复发送会让服务端取到错的那个。
+     */
+    private String collectCookies() {
+        CookieManager cm = CookieManager.getInstance();
+        String[] sources = {
+                // 用带路径的完整地址，否则拿不到挂在 /jsxsd 上的 jsessionid
+                cm.getCookie(TimetableRepository.LOADKB_URL),
+                cm.getCookie("https://sso.wuyiu.edu.cn/login")
+        };
+        java.util.LinkedHashMap<String, String> byName = new java.util.LinkedHashMap<>();
+        for (String raw : sources) {
+            if (raw == null || raw.isEmpty()) continue;
+            for (String part : raw.split(";")) {
+                String p = part.trim();
+                if (p.isEmpty()) continue;
+                int eq = p.indexOf('=');
+                String name = eq > 0 ? p.substring(0, eq).trim() : p;
+                if (!byName.containsKey(name)) {
+                    byName.put(name, p);
+                }
+            }
+        }
+        StringBuilder sb = new StringBuilder();
+        for (String v : byName.values()) {
+            if (sb.length() > 0) sb.append("; ");
+            sb.append(v);
+        }
+        if (byName.isEmpty()) {
+            appendLog("没有可用 Cookie");
+        } else {
+            appendLog("已取得 " + byName.size() + " 个 Cookie（" + byName.keySet() + "）");
+        }
+        return sb.toString();
+    }
+
+    private void fetchFromServer() {
+        if (!isCrawling) return;
+
+        final String cookie = collectCookies();
+        if (cookie.isEmpty()) {
+            appendLog("还没有拿到登录 Cookie，稍后重试");
+            return;
+        }
+
+        appendLog("通过接口直接获取课表…");
+        new Thread(() -> {
+            try {
+                TimetableRepository.Snapshot snap =
+                        TimetableRepository.fetch(cookie, this::appendLog);
+                final String json = buildTimetableJson(snap);
+                mainHandler.post(() -> backBridge.onCourses(json));
+            } catch (Exception e) {
+                Log.e(TAG, "接口获取课表失败", e);
+                final String msg = e.getMessage() == null ? e.toString() : e.getMessage();
+                appendLog("接口获取失败：" + msg);
+                mainHandler.post(() -> {
+                    if (!isCrawling) return;
+                    isCrawling = false;
+                    hasInjectedLogin = false;
+                    if (retryCount < MAX_RETRY) {
+                        retryCount++;
+                        appendLog("课表获取失败，第 " + retryCount + " 次重试…");
+                        notifyFrontError("课表获取失败，正在重试...");
+                        mainHandler.postDelayed(() -> retryCrawl(), RETRY_DELAY_MS);
+                    } else {
+                        appendLog("课表获取失败，请检查网络或重新登录");
+                        notifyFrontError("课表获取失败，请检查网络或重新登录");
+                    }
+                });
+            }
+        }, "timetable-http").start();
+    }
+
+    /**
+     * 把一次抓取的快照序列化成前端载荷。
+     *
+     * <p>载荷里给的是<b>整个学期</b>的课程，而不是某一周。前端据此按日期
+     * 自行过滤"今天/明天/本周"以及用户点选的周次 —— 这样切周次、跨周
+     * （周日点"明天"）都只是纯本地计算，不再有异步等待与超时。
+     *
+     * <p>每门课带上结构化的周次（kind/from/to/list），是因为前端要判断
+     * "第 12 周有没有这门课"，用 display() 出来的字符串再去反解很容易出错，
+     * 双周/单周那种形态尤其容易被当成"每周都上"。
+     */
+    private static String buildTimetableJson(TimetableRepository.Snapshot snap) {
+        try {
+            JSONObject root = new JSONObject();
+            root.put("mode", "offline");
+            root.put("currentWeek", snap.currentWeek);
+            root.put("currentWeekLabel", snap.currentWeekLabel(snap.currentWeek));
+            root.put("firstMonday", TimetableRepository.formatDate(snap.firstMonday));
+
+            // 可选周次：1..20（服务端 zc 的取值范围，探测得知 21 及以上为空）
+            JSONArray weeks = new JSONArray();
+            for (int w = 1; w <= 20; w++) {
+                JSONObject o = new JSONObject();
+                o.put("value", String.valueOf(w));
+                o.put("label", snap.currentWeekLabel(w));
+                weeks.put(o);
+            }
+            root.put("weeks", weeks);
+
+            // 当前周的表头（周一..周日 + 服务端给的日期），用于周视图标题
+            JSONArray days = new JSONArray();
+            for (TimetableParser.Day d : snap.currentWeekDays) {
+                JSONObject o = new JSONObject();
+                o.put("name", d.name);
+                o.put("date", d.date == null ? "" : d.date);
+                days.put(o);
+            }
+            root.put("days", days);
+
+            JSONArray arr = new JSONArray();
+            for (TimetableParser.Course c : snap.courses) {
+                JSONObject o = new JSONObject();
+                o.put("name", c.name);
+                o.put("teacher", c.teacher);
+                o.put("location", c.location);
+                o.put("sections", c.sections);
+                o.put("sectionFrom", c.sectionFrom);
+                o.put("sectionTo", c.sectionTo);
+                o.put("weekRange", c.weekRange);
+                o.put("dayIndex", c.dayIndex);
+                o.put("dayOfWeek", c.dayOfWeek);
+                o.put("date", c.date == null ? "" : c.date);
+
+                TimetableParser.WeekRange wr = c.weeks;
+                o.put("weekKind", wr == null ? "ALL" : wr.kind.name());
+                o.put("weekFrom", wr == null ? 1 : wr.from);
+                o.put("weekTo", wr == null ? 30 : wr.to);
+                JSONArray list = new JSONArray();
+                if (wr != null && wr.weeks != null) {
+                    for (int w : wr.weeks) list.put(w);
+                }
+                o.put("weekList", list);
+
+                arr.put(o);
+            }
+            root.put("courses", arr);
+            return root.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "序列化课表失败", e);
+            return "{\"courses\":[]}";
+        }
+    }
+
     // ==================== WebView 客户端 ====================
     private class CrawlerClient extends WebViewClient {
         @Override
@@ -317,8 +491,12 @@ public class HomeFragment extends Fragment {
                 hasInjectedLogin = true;
                 view.postDelayed(() -> injectAutoLogin(view), 1000);
             } else if (url.contains("xsMainV_new.htmlx") || url.contains("xsMainV.htmlx")) {
-                appendLog("已进入教务系统主页，准备提取课表");
-                view.postDelayed(() -> injectParser(view), 1500);
+                // 登录已成功，Cookie 已经写进 CookieManager。
+                // 从这里开始不再往页面里注入解析脚本，而是直接持有 Cookie
+                // 去请求课表接口 —— 服务端返回的就是那张表格的 HTML 原文，
+                // 解析它的确定性和"页面里 DOM 变成什么样"完全无关。
+                appendLog("已进入教务系统，改用接口直接获取课表");
+                view.postDelayed(() -> fetchFromServer(), 300);
             }
         }
 
@@ -553,6 +731,11 @@ public class HomeFragment extends Fragment {
      * 等待策略：观察 #kbLoading 子树变化，而不是固定 sleep。
      * 一旦容器内容真的更新了就立刻解析；超时则报错，避免静默卡住。
      */
+    /**
+     * @deprecated 旧方案：往教务系统页面注入 se(null) 再等 DOM 变化。
+     * 现在数据走 {@link #fetchFromServer()}，不再需要，保留仅为对照。
+     */
+    @Deprecated
     private void changeWeek(String weekValue) {
         if (isCrawling) {
             // 明确通知前端"这次切换被拒"，而不是静默返回。
