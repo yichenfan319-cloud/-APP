@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# 发布签名配置，含密码，绝不入库
+keystore.properties
+*.jks
+*.keystore
+*.p12
