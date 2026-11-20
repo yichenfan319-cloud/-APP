@@ -395,22 +395,7 @@ public class MainActivity extends AppCompatActivity {
      * 状态栏，那边有蓝色 AppBar，两边需求不一样。
      */
     private void applySystemBars() {
-        Window window = getWindow();
-        int surface = MaterialColors.getColor(window.getDecorView(),
-                R.attr.colorSurfaceScreen, 0xFFF0F2F5);
-        window.setStatusBarColor(surface);
-        window.setNavigationBarColor(ContextCompat.getColor(this, android.R.color.transparent));
-
-        boolean night = (getResources().getConfiguration().uiMode
-                & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-        View decor = window.getDecorView();
-        int flags = decor.getSystemUiVisibility();
-        if (night) {
-            flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        } else {
-            flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        }
-        decor.setSystemUiVisibility(flags);
+        SystemBars.apply(this);
     }
 
     @Override
