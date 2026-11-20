@@ -55,7 +55,6 @@ public class HomeFragment extends Fragment {
     private int retryCount = 0;
 
     // 是否正在等待"切换周次"后的新课表（用于区分首次加载与切周次）
-    private boolean changeWeekPending = false;
 
     // 后台桥接对象。保留引用是因为新的 HTTP 取数线程拿到数据后，要复用
     // onCourses() 里那套（保存凭据 -> 推前端 -> 记日志）的统一收尾逻辑，
@@ -579,221 +578,6 @@ public class HomeFragment extends Fragment {
         view.evaluateJavascript(js, null);
     }
 
-    // ==================== 课表解析 JS 注入 ====================
-    private void injectParser(WebView view) {
-        // 设置解析超时（10秒）
-        mainHandler.postDelayed(() -> {
-            if (isCrawling) {
-                Log.e(TAG, "解析超时");
-                if (retryCount < MAX_RETRY) {
-                    retryCount++;
-                    Log.w(TAG, "解析超时，第 " + retryCount + " 次重试...");
-                    isCrawling = false;
-                    hasInjectedLogin = false;
-                    mainHandler.postDelayed(() -> retryCrawl(), RETRY_DELAY_MS);
-                } else {
-                    notifyFrontError("解析超时，请重试");
-                    isCrawling = false;
-                    hasInjectedLogin = false;
-                }
-            }
-        }, 10000);
-
-        String js = "window.__parseTimetable = function() { try {" +
-                // 教务系统返回的地点文本存在前缀重复，例如：
-                //   瑞樟4瑞樟4-101   体育馆体育馆[篮球场]   屏山7屏山7-403[...]
-                // 判据：存在 k（2 <= k <= len/2）使 s 以「同一前缀连写两遍」开头，
-                // 且重复之后仍有剩余内容（k < len-2k 的约束见下面 break）。
-                // 满足则折叠为  p + s.substring(2k)。
-                // 之所以要求“还有剩余”，是为了不把「A101A101」这种
-                // 本身就是完整房间号的字符串截断成「A101」。
-                "var dedupPrefix = function(s) {" +
-                "    if (!s) return s;" +
-                "    var len = s.length, max = Math.floor(len / 2);" +
-                "    for (var k = 2; k <= max; k++) {" +
-                "        if (len - 2 * k < 1) break;" +
-                "        var p = s.substring(0, k);" +
-                "        if (s.startsWith(p + p)) return p + s.substring(2 * k);" +
-                "    }" +
-                "    return s;" +
-                "};" +
-                // 从 item 自身的 detailitem 里取字段。
-                // 注意真实 DOM 结构：<div class="qz-tooltip"> 是 <ul class="courselists">
-                // 的兄弟，不是 <li> 的兄弟，所以 item.nextElementSibling() 恒为 null，
-                // 原来那段 tooltip 读取逻辑从未生效，weekRange / sections 一直是空的。
-                // 这里改为读取 item 下的 qz-hasCourse-detailitem，与 tooltip 里同源。
-                //   '教师：方政蕊'            -> teacher
-                //   '01~02小节'              -> sections（无前缀，靠后缀识别）
-                //   '[1-16周] 星期二'        -> weekRange + dayDate
-                //   '瑞樟4瑞樟4-101'         -> location（前缀重复，走 dedupPrefix）
-                "var parseItemDetails = function(item, course) {" +
-                "    var dets = item.querySelectorAll('div.qz-hasCourse-detailitem');" +
-                "    for (var i = 0; i < dets.length; i++) {" +
-                "        var t = dets[i].textContent.trim();" +
-                "        if (!t) continue;" +
-                "        if (t.indexOf('教师：') === 0) {" +
-                "            if (!course.teacher) course.teacher = t.substring(3);" +
-                "        } else if (/小节$/.test(t)) {" +
-                "            if (!course.sections) course.sections = t;" +
-                "        } else if (t.charAt(0) === '[') {" +
-                "            if (!course.weekRange) course.weekRange = t;" +
-                "        } else if (t.indexOf('：') < 0 && !course.location) {" +
-                "            course.location = t;" +
-                "        }" +
-                "    }" +
-                "};" +
-                "var table = document.querySelector('table.qz-weeklyTable');" +
-                "if (!table) { AndroidBack.onError('未找到课表表格'); return; }" +
-                "var courses = [];" +
-                "var headers = [];" +
-                "var ths = table.querySelectorAll('thead tr th.qz-weeklyTable-th');" +
-                "for (var i = 1; i < ths.length; i++) {" +
-                "    var spans = ths[i].querySelectorAll('span');" +
-                "    if (spans.length >= 2) {" +
-                "        headers.push({day: spans[0].textContent.trim(), date: spans[1].textContent.trim()});" +
-                "    }" +
-                "}" +
-                "var rows = table.querySelectorAll('tbody tr.qz-weeklyTable-tr');" +
-                "rows.forEach(function(row) {" +
-                "    var tds = row.querySelectorAll('td.qz-weeklyTable-td');" +
-                "    if (tds.length === 0) return;" +
-                "    var timeSlot = '';" +
-                "    var titleDiv = tds[0].querySelector('div.index-title');" +
-                "    if (titleDiv) timeSlot = titleDiv.textContent.trim();" +
-                "    for (var dayIdx = 1; dayIdx < tds.length && dayIdx <= headers.length; dayIdx++) {" +
-                "        var td = tds[dayIdx];" +
-                "        var ul = td.querySelector('ul.courselists');" +
-                "        if (!ul) continue;" +
-                "        var items = ul.querySelectorAll('li.courselists-item');" +
-                "        items.forEach(function(item) {" +
-                "            var nameDiv = item.querySelector('div.qz-hasCourse-title');" +
-                "            var name = nameDiv ? nameDiv.textContent.trim() : '未知课程';" +
-                // 字段一次性从 item 自身的 detailitem 解析（tooltip 取不到，见上面说明）
-                "            var course = {teacher:'', location:'', weekRange:'', sections:''};" +
-                "            parseItemDetails(item, course);" +
-                "            courses.push({" +
-                "                name: name," +
-                "                teacher: course.teacher || '未知教师'," +
-                "                location: dedupPrefix(course.location) || '未知地点'," +
-                "                weekRange: course.weekRange," +
-                "                dayOfWeek: headers[dayIdx - 1].day," +
-                // dayDate 用表头里的日期（如 10-13）。
-                // 注意不要改用 weekRange 里的「星期二」：那只是"星期几"，
-                // 语义上与 dayOfWeek 重复，且显示时会与"第"字拼出「第10-13」这种怪结果。
-                "                dayDate: headers[dayIdx - 1].date," +
-                "                timeSlot: timeSlot," +
-                "                sections: course.sections || timeSlot" +
-                "            });" +
-                "        });" +
-                "    }" +
-                "});" +
-                // 当前周次：教务系统已在页面里算好并选中，直接读，不要自己按开学日期推算。
-                // 同时把可选周次一起回传，让界面上的周次选择由页面数据驱动，
-                // 而不是在前端硬编码「第 1..20 周」。
-                "var weekOptions = [];" +
-                "var weekSel = document.getElementById('week');" +
-                "if (weekSel) {" +
-                "    for (var wi = 0; wi < weekSel.options.length; wi++) {" +
-                "        var op = weekSel.options[wi];" +
-                "        if (op.value) weekOptions.push({value: op.value, label: op.textContent.trim()});" +
-                "    }" +
-                "}" +
-                "var currentWeek = '';" +
-                "var selOpt = document.querySelector('select option[selected]');" +
-                "if (selOpt) currentWeek = selOpt.textContent.trim();" +
-                "if (!currentWeek) {" +
-                "    var sel = document.querySelector('select');" +
-                "    if (sel && sel.options && sel.selectedIndex >= 0) currentWeek = sel.options[sel.selectedIndex].text;" +
-                "}" +
-                "if (!currentWeek) {" +
-                "    var inputs = document.querySelectorAll('input.layui-unselect');" +
-                "    for (var k = 0; k < inputs.length; k++) {" +
-                "        var v = inputs[k].value || '';" +
-                "        if (/第.+周/.test(v)) { currentWeek = v; break; }" +
-                "    }" +
-                "}" +
-                "AndroidBack.onCourses(JSON.stringify({courses: courses, currentWeek: currentWeek, weeks: weekOptions}));" +
-                "} catch(e) { AndroidBack.onError(e.message); }" +
-                "};" +
-                "window.__parseTimetable();";
-        view.evaluateJavascript(js, null);
-    }
-
-    /**
-     * 切换课表周次。
-     *
-     * 复用学校页面自己的逻辑：把 #week 的值改掉，再调用它页面里的 se(null)，
-     * 它会用 jQuery 的 $(...).load() 把新课表注入 #kbLoading 容器。
-     *
-     * 为什么不直接拼那个 URL：URL 里带 kbjcmsid / xnxq01id 等参数，
-     * 前者随课表模式变化、后者每学期都不同。复用页面逻辑就不必写死它们。
-     *
-     * 等待策略：观察 #kbLoading 子树变化，而不是固定 sleep。
-     * 一旦容器内容真的更新了就立刻解析；超时则报错，避免静默卡住。
-     */
-    /**
-     * @deprecated 旧方案：往教务系统页面注入 se(null) 再等 DOM 变化。
-     * 现在数据走 {@link #fetchFromServer()}，不再需要，保留仅为对照。
-     */
-    @Deprecated
-    private void changeWeek(String weekValue) {
-        if (isCrawling) {
-            // 明确通知前端"这次切换被拒"，而不是静默返回。
-            // 静默返回时前端会一直挂着"待切周次"状态，下一批旧数据一到
-            // 就会用上一周的数据渲染成"明天"，界面完全看不出异常。
-            appendLog("正在抓取课表，稍后再切换周次");
-            mainHandler.post(() -> {
-                if (webView != null) {
-                    webView.evaluateJavascript(
-                            "window.receiveFromAndroid('weekFailed', '正在抓取课表，请稍后重试');", null);
-                }
-            });
-            return;
-        }
-        isCrawling = true;
-        changeWeekPending = true;
-        appendLog("切换周次：" + (weekValue.isEmpty() ? "全部" : "第 " + weekValue + " 周"));
-
-        String js =
-                "(function() {" +
-                "  var wk = document.getElementById('week');" +
-                "  if (!wk) { AndroidBack.onError('未找到周次选择控件 #week'); return; }" +
-                "  wk.value = '" + weekValue + "';" +
-                "  var box = document.getElementById('kbLoading');" +
-                "  if (!box) { AndroidBack.onError('未找到课表容器 #kbLoading'); return; }" +
-                "  if (typeof se !== 'function') { AndroidBack.onError('页面未定义 se()'); return; }" +
-                "  var done = false;" +
-                "  var snap = function() {" +
-                "    return box.innerHTML.length + ':' + box.querySelectorAll('li.courselists-item').length;" +
-                "  };" +
-                "  var before = snap();" +
-                "  var fire = function(tag) {" +
-                "    if (done) return; done = true;" +
-                "    if (obs) obs.disconnect();" +
-                "    if (timer) clearTimeout(timer);" +
-                "    AndroidBack.onLog('周次加载' + tag + '，准备重新解析');" +
-                "    __parseTimetable();" +
-                "  };" +
-                "  var obs = new MutationObserver(function() {" +
-                "    if (snap() !== before) fire('完成');" +
-                "  });" +
-                "  obs.observe(box, {childList: true, subtree: true, characterData: true});" +
-                // 兜底：容器结构没变（例如该周本就没课）也要收尾，不能让状态卡住
-                "  var timer = setTimeout(function() { fire('超时'); }, 6000);" +
-                "  try { se(null); } catch (e) { AndroidBack.onError('调用 se() 失败: ' + e.message); }" +
-                "})();";
-        crawlerView.evaluateJavascript(js, null);
-
-        // 二次兜底：若上面整段都没能回调（页面异常等），恢复状态
-        mainHandler.postDelayed(() -> {
-            if (changeWeekPending) {
-                changeWeekPending = false;
-                isCrawling = false;
-                appendLog("周次切换超时，请重试");
-            }
-        }, 15000);
-    }
-
     // ==================== Java 与 JS 桥接 ====================
     public class BackBridge {
         @JavascriptInterface
@@ -816,17 +600,12 @@ public class HomeFragment extends Fragment {
                 hasValidData = false;
             }
 
-            // 如果是"切换周次"触发的解析，无论结果如何都不要再走重试逻辑，
-            // 否则用户选了一个没课的周，会被当成抓取失败反复重试。
-            final boolean fromWeekChange = changeWeekPending;
-            changeWeekPending = false;
-
             final boolean isValid = hasValidData;
             appendLog("解析得到 " + courseCount + " 门课程"
                     + (currentWeek.isEmpty() ? "" : "，当前" + currentWeek));
 
-            // 没有有效数据且不是切周次导致的，才重试
-            if (!isValid && !fromWeekChange && retryCount < MAX_RETRY) {
+            // 没有有效数据才重试
+            if (!isValid && retryCount < MAX_RETRY) {
                 retryCount++;
                 appendLog("课表为空，第 " + retryCount + " 次重试…");
                 notifyFrontError("获取课表为空，正在重试...");
