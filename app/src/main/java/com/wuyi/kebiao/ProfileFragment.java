@@ -88,6 +88,15 @@ public class ProfileFragment extends Fragment {
         });
         view.findViewById(R.id.layout_auto_check).setOnClickListener(v ->
                 autoCheck.setChecked(!autoCheck.isChecked()));
+
+        // ==================== 液态玻璃开关 ====================
+        MaterialSwitch glass = view.findViewById(R.id.switch_glass);
+        glass.setChecked(Prefs.get(requireContext()).getBoolean(Prefs.KEY_GLASS, true));
+        glass.setOnCheckedChangeListener((btn, isChecked) ->
+                Prefs.get(requireContext()).edit().putBoolean(Prefs.KEY_GLASS, isChecked).apply());
+        // 同样让整行可点。主界面在 onResume 里重新读取这个值并应用，所以不用回调。
+        view.findViewById(R.id.layout_glass).setOnClickListener(v ->
+                glass.setChecked(!glass.isChecked()));
     }
 
     // ==================== 原有方法 ====================

@@ -1,23 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  主容器：底部导航栏已移除。
-  个人页（原「我的」）改为顶栏齿轮图标进入 SettingsActivity。
-  整个界面的排布由 assets/www/index.html 负责。
+  主容器：内容铺满全屏，玻璃导航浮在它上面。
+
+  这里必须是"浮"而不是"排在下面"：LiquidGlassView 采样的是它背后已经画好的
+  内容，只有当列表能滚到它下沿之外时，折射才看得出来。所以各页面自己负责
+  留出底部 padding（见 page_bottom_inset），导航才不会压住最后一行。
+
+  glass_lens 是"手指拖动时跟着走的那颗透镜"：它比导航栏高 24dp，上下各鼓出
+  12dp，采样源指向 nav_items，所以滑到哪就把那里的图标文字折射放大。
 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
     android:background="?attr/colorSurfaceScreen">
 
-    <androidx.fragment.app.FragmentContainerView
-        android:id="@+id/nav_host_fragment"
-        android:name="androidx.navigation.fragment.NavHostFragment"
+    <!-- 三个页面都塞在这里，用 show/hide 切换，不重建 -->
+    <FrameLayout
+        android:id="@+id/page_container"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        app:defaultNavHost="true"
-        app:navGraph="@navigation/nav_graph" />
+        android:layout_height="match_parent" />
 
-</LinearLayout>
+    <!-- 隐藏的 WebView 挂在这儿：尺寸为 0，用户看不到，只用来过单点登录 -->
+    <FrameLayout
+        android:id="@+id/engine_host"
+        android:layout_width="0dp"
+        android:layout_height="0dp" />
+
+    <!-- 底栏：半透明实心胶囊。刻意<b>不用</b>液态玻璃 ——
+         那个库的取景是进程级共享的，同窗口两个实例会 SIGSEGV 崩在 RenderThread（真机实测）。
+         所以把唯一那个玻璃实例留给跟手珠子，底栏退成半透明胶囊；
+         珠子才有东西可折射（图标文字），边缘才会真的弯。 -->
+    <FrameLayout
+        android:id="@+id/glass_nav"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="18dp"
+        android:layout_marginEnd="18dp"
+        android:layout_marginBottom="18dp">
+
+        <LinearLayout
+            android:id="@+id/nav_items"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal" />
+
+    </FrameLayout>
+
+    <!-- 拖动时跟随手指的透镜：横向略宽的椭圆（108×84），圆心落在底栏中线上。
+         角半径取高度的一半 = 42dp，两侧才没有明显的直角边。
+         全工程唯一的一个液态玻璃实例：它采样窗口像素，所以手指滑到哪里，
+         哪里底栏的图标文字就被真实折射（边缘会弯、带一点色散）。
+         多加一个实例就会 SIGSEGV，别再往这个窗口里放第二个。 -->
+    <com.example.liquidglass.LiquidGlassView
+        android:id="@+id/glass_lens"
+        android:layout_width="108dp"
+        android:layout_height="84dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginBottom="8dp"
+        android:visibility="invisible"
+        app:cornerRadius="42dp" />
+
+    <!-- 盖在导航栏上的透明手势层：只负责拖动透镜，轻点时转成对应项的点击 -->
+    <View
+        android:id="@+id/nav_scrubber"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:layout_gravity="bottom"
+        android:layout_marginStart="18dp"
+        android:layout_marginEnd="18dp"
+        android:layout_marginBottom="18dp" />
+
+</FrameLayout>

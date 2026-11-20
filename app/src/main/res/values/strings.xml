@@ -7,4 +7,53 @@
     <!-- 设置页：自动检查更新开关 -->
     <string name="settings_auto_check">自动检查更新</string>
     <string name="settings_auto_check_desc">启动时检查是否有新版本</string>
+
+    <!-- ============ 新版三页界面 ============ -->
+    <string name="app_title_caps">KIPKIP</string>
+    <string name="settings">设置</string>
+
+    <!-- 底部导航 -->
+    <string name="nav_today">本日</string>
+    <string name="nav_week">周次</string>
+    <string name="nav_account">账号</string>
+
+    <!-- 本日页：粒子球旁的状态栏 -->
+    <string name="status_label">状态</string>
+    <string name="status_idle">待命中</string>
+    <string name="status_thinking">正在处理</string>
+    <string name="status_searching">正在查课</string>
+    <string name="status_done">课表已就绪</string>
+    <string name="status_error">出错了</string>
+    <string name="status_detail_idle">填好学号和密码，我来帮你把课表搬回来</string>
+    <string name="status_detail_thinking">正在准备登录</string>
+    <string name="status_detail_searching">正在连接教务系统</string>
+    <string name="status_detail_done">已按今天筛选出课程</string>
+
+    <string name="today">今天</string>
+    <string name="section_unit">节次</string>
+    <string name="course_count">%1$d 门</string>
+    <string name="week_list_prefix">周次：%1$s</string>
+    <string name="no_course_today">今天没有课，好好休息吧~</string>
+
+    <!-- 周次页 -->
+    <string name="current_week_label">当前周</string>
+    <string name="pick_week_label">选择周</string>
+    <string name="week_value">第 %1$d 周</string>
+    <string name="week_picker_title">选择周次</string>
+
+    <!-- 账号页 -->
+    <string name="account_ok">状态：已设置并验证</string>
+    <string name="account_missing">状态：未设置账号密码</string>
+    <string name="account_verified_hint">您已完成学号账号和密码验证！</string>
+    <string name="account_signed_as">当前账号 %1$s</string>
+    <string name="label_student_id">学号</string>
+    <string name="label_password">密码</string>
+    <string name="action_verify">验证</string>
+    <string name="verify_hint">验证会真的登录一次教务处，成功后才算通过</string>
+    <string name="verify_empty">请把学号和密码都填上</string>
+    <string name="verify_running">正在验证…</string>
+    <string name="verify_ok">验证通过</string>
+    <string name="verify_failed">验证失败：%1$s</string>
+    <string name="settings_glass">液态玻璃导航</string>
+    <string name="settings_glass_desc">底栏使用液态玻璃折射效果</string>
 </resources>

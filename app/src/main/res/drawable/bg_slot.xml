@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 节次胶囊的底：品牌蓝浅色填充 + 24dp 圆角。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/brand_primary_container" />
+    <corners android:radius="14dp" />
+</shape>

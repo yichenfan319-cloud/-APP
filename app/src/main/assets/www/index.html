@@ -238,6 +238,36 @@
         /* 日标题后的第一张卡片不再需要上边框，避免两份分隔线叠在一起 */
         .day-heading + .course { border-top: none; padding-top: 0; }
 
+        /* ========== 切换时的粒度消散 ==========
+           参考 dissolve.rselmi.com 的观感：内容拆成微粒散开，而不是整块淡出。
+           它是 React Native + Skia 的库，装不进 WebView，这里是纯 DOM 复刻。 */
+        .dust-layer {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 99;
+            overflow: hidden;
+        }
+        .dust {
+            position: absolute;
+            border-radius: 50%;
+            will-change: transform, opacity;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .dust-layer { display: none; }
+        }
+        /* 新内容淡入补位：旧内容碎成粉尘的同时，新内容从轻微下坠中浮现，
+           否则会读成"内容没动、旁边多了点灰"。只做位移和透明度，不加模糊，
+           周视图十几张卡片时模糊滤镜会明显掉帧。 */
+        @keyframes contentIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: none; }
+        }
+        .board.content-in > * { animation: contentIn 0.26s ease-out both; }
+        @media (prefers-reduced-motion: reduce) {
+            .board.content-in > * { animation: none; }
+        }
+
         /* ========== 登录页 ========== */
         .login-wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
         .field { margin-bottom: 14px; }
@@ -590,14 +620,112 @@
             '</div>';
     }
 
+    /* ============================================================
+       切换课表时的「消散」过渡
+       ------------------------------------------------------------
+       做法：换 DOM 之前，先在固定层上按卡片几何生成一批微粒，让它们
+       随机飘散并淡出，同时立刻换上新内容。用户看到的是"旧内容碎成粉
+       末散开、新内容已经在后面了"，而不是硬切。
+
+       几个刻意的取舍：
+       - 只在已有课程卡片时才发散（否则从空态切过来会凭空冒灰）。
+       - 视口外的元素跳过：周视图能排到十几张卡片，全生成会白烧帧。
+       - 粒子数封顶，机型性能差也不会卡。
+       - 尊重 prefers-reduced-motion（CSS 里直接隐藏这一层）。
+       ============================================================ */
+    const DUST = { enabled: true, life: 620, max: 220 };
+
+    function reduceMotion() {
+        return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    }
+
+    function emitDust() {
+        if (!DUST.enabled || reduceMotion()) return;
+        // 极简 DOM 垫片（离线测试用）没有布局能力，直接跳过，别让测试环境崩
+        if (!board.querySelectorAll || typeof document.createElement !== 'function') return;
+        // 空态不发散：没有"旧内容"可碎
+        if (!board.querySelector('.course')) return;
+
+        const nodes = board.querySelectorAll('.course, .day-heading');
+        const vh = window.innerHeight || 800;
+        const pts = [];
+        for (const el of nodes) {
+            if (!el.getBoundingClientRect) continue;
+            const r = el.getBoundingClientRect();
+            if (r.bottom < 0 || r.top > vh || r.width < 8) continue;
+            const cols = Math.max(2, Math.min(6, Math.round(r.width / 110)));
+            const rows = Math.max(2, Math.min(4, Math.round(r.height / 30)));
+            for (let i = 0; i < cols && pts.length < DUST.max; i++) {
+                for (let j = 0; j < rows && pts.length < DUST.max; j++) {
+                    pts.push({
+                        x: r.left + (i + 0.5) * r.width / cols + (Math.random() - 0.5) * 10,
+                        y: r.top + (j + 0.5) * r.height / rows + (Math.random() - 0.5) * 8,
+                        size: 3 + Math.random() * 4,
+                        color: Math.random() < 0.6 ? 'var(--primary)' : 'var(--text-label)'
+                    });
+                }
+            }
+        }
+        if (!pts.length) return;
+
+        const layer = document.createElement('div');
+        layer.className = 'dust-layer';
+        document.body.appendChild(layer);
+
+        for (const p of pts) {
+            const dot = document.createElement('div');
+            dot.className = 'dust';
+            dot.style.left = p.x + 'px';
+            dot.style.top = p.y + 'px';
+            dot.style.width = p.size + 'px';
+            dot.style.height = p.size + 'px';
+            dot.style.background = p.color;
+            dot.style.opacity = '0.5';
+            layer.appendChild(dot);
+
+            // 下一帧再设终点，否则初始值与终点值会被浏览器合并、不动
+            const dx = (Math.random() - 0.5) * 52;
+            const dy = 12 + Math.random() * 30;
+            const scale = 0.2 + Math.random() * 0.4;
+            const rot = (Math.random() - 0.5) * 120;
+            requestAnimationFrame(function() {
+                dot.style.transition = 'transform ' + DUST.life + 'ms cubic-bezier(.2,.7,.3,1),'
+                        + ' opacity ' + DUST.life + 'ms linear';
+                dot.style.transform = 'translate(' + dx + 'px,' + dy + 'px) rotate(' + rot + 'deg)'
+                        + ' scale(' + scale + ')';
+                dot.style.opacity = '0';
+            });
+        }
+        setTimeout(function() { layer.remove(); }, DUST.life + 150);
+    }
+
+    /**
+     * 所有写 board 的地方都走这里。
+     *
+     * 之前 showWeek() 自己拼完 HTML 直接 board.innerHTML = ...，绕过了
+     * renderCourses，于是周视图既没有消散也没有进场动画，只有"今天/明天"
+     * 两档有 —— 同一份界面出现两种手感。
+     */
+    function paintBoard(html) {
+        emitDust();
+        board.innerHTML = html;
+        // 重新触发动画：同名 class 连续存在时浏览器不会重播 keyframes，
+        // 必须先摘掉并强制一次样式计算（读 offsetWidth）。
+        if (board.classList && !reduceMotion()) {
+            board.classList.remove('content-in');
+            void board.offsetWidth;
+            board.classList.add('content-in');
+        }
+    }
+
     function renderCourses(list, emptyText) {
         if (!list || list.length === 0) {
-            board.innerHTML = '<div class="empty">' + escapeHtml(emptyText) + '</div>';
+            paintBoard('<div class="empty">' + escapeHtml(emptyText) + '</div>');
             return;
         }
         let html = '';
         for (const c of list) html += courseCardHtml(c);
-        board.innerHTML = html;
+        paintBoard(html);
     }
 
     function courses() { return window.coursesData || []; }
@@ -968,7 +1096,7 @@
         currentView = 'week';
         setActiveTab(weekBtn);
         if (courses().length === 0) {
-            board.innerHTML = '<div class="empty">暂无课表</div>';
+            paintBoard('<div class="empty">暂无课表</div>');
             return;
         }
         const week = viewedWeek();
@@ -990,7 +1118,7 @@
         }
         const w = isNaN(week) ? '?' : week;
         pushLog('第 ' + w + ' 周：' + shownDays + ' 天，共 ' + total + ' 门');
-        board.innerHTML = html || '<div class="empty">第 ' + w + ' 周没有课</div>';
+        paintBoard(html || '<div class="empty">第 ' + w + ' 周没有课</div>');
     }
 
     /**

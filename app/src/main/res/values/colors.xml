@@ -45,6 +45,10 @@
     <color name="text_primary">#FF1A2C3E</color>
     <color name="text_hint">#FF999999</color>
 
+    <!-- 账号验证状态：绿=已通过，红=未设置/失败。两种底色下都能看清，不区分夜间 -->
+    <color name="status_ok">#FF2E9E5B</color>
+    <color name="status_error">#FFE5484D</color>
+
     <!-- 课程格子：空位底色与其边框 -->
     <color name="grid_empty">#FFFAFAFA</color>
     <color name="grid_stroke">#FFE0E0E0</color>

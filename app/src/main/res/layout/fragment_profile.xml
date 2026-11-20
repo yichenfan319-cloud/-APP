@@ -172,6 +172,34 @@
 
                 <View style="@style/SettingsDivider" />
 
+                <!-- 液态玻璃：开关行 -->
+                <LinearLayout
+                    android:id="@+id/layout_glass"
+                    style="@style/SettingsRow">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            style="@style/SettingsRowTitle"
+                            android:text="@string/settings_glass" />
+
+                        <TextView
+                            style="@style/SettingsRowSubtitle"
+                            android:text="@string/settings_glass_desc" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/switch_glass"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+
+                <View style="@style/SettingsDivider" />
+
                 <!-- 问题反馈 -->
                 <LinearLayout
                     android:id="@+id/layout_feedback"

@@ -8,7 +8,9 @@ android {
 
     defaultConfig {
         applicationId = "com.wuyi.kebiao"
-        minSdk = 21
+        // 24 是液态玻璃库的下限（它的 C++/NEON 降级管线要求 API 24）。
+        // 21~23（Android 5~6）在这个年代已基本绝迹，提到 24 换取真实的折射玻璃。
+        minSdk = 24
         targetSdk = 34
         versionCode = 13
         versionName = "2.1.2-beta"
@@ -53,6 +55,9 @@ dependencies {
     // jsoup：教务系统返回的课表是一个表格片段，用 DOM 解析比正则可靠得多，
     // 而且是纯 Java 实现，可以直接在 JVM 单元测试里跑，不用开模拟器。
     implementation(libs.jsoup)
+
+    // 液态玻璃：底部导航栏要的 iOS 26 质感。
+    implementation(libs.liquidglass)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
