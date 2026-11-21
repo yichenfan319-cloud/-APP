@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  自适应图标（Android 8.0+）。
+  画面整体放在 background 层（已经按 108dp 出好五档位图），foreground 层留空 ——
+  因为这张图是"线描风景 + 描边背景"的整体插画，没法拆成可独立着色的前景色块，
+  强行拆分反而会在蒙版裁切时露出接缝。
+  monochrome 层（Android 13+ 主题图标）故意不写：这张图是多色的，
+  压成单色会丢掉全部信息，交给系统回退到普通图标更合适。
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@drawable/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
-    <!-- Android 13+ 的“主题化图标”：系统会拿这层重新着色 -->
-    <monochrome android:drawable="@drawable/ic_launcher_foreground" />
+    <background android:drawable="@mipmap/ic_launcher_bg" />
+    <foreground android:drawable="@drawable/ic_launcher_fg_blank" />
 </adaptive-icon>
