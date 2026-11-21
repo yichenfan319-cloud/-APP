@@ -3,6 +3,38 @@
 格式参照 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 `主版本.次版本.修订号-阶段`。
 
+## [2.1.4-beta] - 2026-11-21
+
+底栏换成真正的折射玻璃，图标换新。
+
+### 新增
+
+- 底栏用 Compose + Kyant0 backdrop 重写：静止时玻璃珠停在当前页上当选中指示，
+  按住放大跟手，松手吸附到最近一项并切页
+- 珠子边缘高光做成垂直渐变（上亮下透），底栏胶囊也有同样的一圈受光边
+- 开源许可页从 8 条扩到 33 条，分成五个分组
+- 新应用图标（线描风景版 K：山、树、太阳、河）
+
+### 变更
+
+- 取数依赖从 `LiquidGlassView`（View 体系）换成 `backdrop-android`（Compose 体系）；
+  前者在同一窗口放两个实例会让 RenderThread 越界写、启动即闪退
+- `compileSdk` 34 → 37（backdrop 的 aar-metadata 硬性要求），
+  `compileOptions` 1.8 → 17
+- 本日页 tab 图标从描边方框改成实心圆角方块
+- 许可清单里的版本号改为「实际解析版本」：
+  `androidx.core` 1.16.0、`kotlin-stdlib` 2.4.21
+
+### 修复
+
+- 设置里关掉液态玻璃后，底部导航点不动
+- 玻璃珠首帧从屏幕左边缘滑进来，以及首帧停在两个 tab 之间
+
+### 移除
+
+- 模板遗留、无人引用的 `ic_launcher_foreground.webp`（四档）
+- 不再使用的 `ic_nav_today/week/account.xml`、`view_nav_item.xml`
+
 ## [2.1.3-beta] - 2026-11-20
 
 界面全面重做，从"网页套壳"变成原生界面；课表获取链路也一起换掉。
