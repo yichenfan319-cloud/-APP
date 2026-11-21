@@ -2,11 +2,15 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "com.wuyi.kebiao"
-    compileSdk = 34
+    // 37 是 backdrop（Compose 液态玻璃）的 aar-metadata 下限，
+    // 34 会在 checkDebugAarMetadata 阶段直接被拒。
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.wuyi.kebiao"
@@ -56,8 +60,19 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        compose = true
+    }
+}
+
+kotlin {
+    compilerOptions {
+        // AGP 9 已经移除 android.kotlinOptions，只能在这里设
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
     }
 }
 
@@ -84,8 +99,12 @@ dependencies {
     // 而且是纯 Java 实现，可以直接在 JVM 单元测试里跑，不用开模拟器。
     implementation(libs.jsoup)
 
-    // 液态玻璃：底部导航栏要的 iOS 26 质感。
-    implementation(libs.liquidglass)
+    // 液态玻璃底栏：Compose 实现，玻璃珠用 backdrop 的 lens() 做真折射。
+    // 只引 ui + foundation，不引 material3 —— 导航栏是自己画的，
+    // 少一个依赖就少一份体积和一份开源许可要交代。
+    implementation(libs.backdrop)
+    implementation(libs.compose.ui)
+    implementation(libs.compose.foundation)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

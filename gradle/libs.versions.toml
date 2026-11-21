@@ -11,7 +11,11 @@ recyclerview = "1.3.2"
 okhttp = "4.12.0"
 gson = "2.10.1"
 jsoup = "1.17.2"
-liquidglass = "v2.0.11"
+
+# --- 底部导航（Compose 版液态玻璃） ---
+kotlin = "2.4.21"
+composeUi = "1.12.0"
+backdrop = "2.0.1"
 
 [libraries]
 # --- 测试 ---
@@ -39,9 +43,14 @@ gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 
 # --- 液态玻璃（iOS 26 风格）---
-# LiquidGlassView 是 FrameLayout 子类，走 Android View 体系，与本 Java 工程契合。
-# API 33+ 用 AGSL 单 pass 透镜管线，24~32 自动降级到 C++/NEON，再低退化成普通毛玻璃。
-liquidglass = { group = "com.github.QWEA0", name = "liquidglass", version.ref = "liquidglass" }
+# backdrop 是 Compose 库：用 rememberLayerBackdrop 记录内容层，再用
+# Modifier.drawBackdrop + lens() 算出折射位移。相比之前的 QWEA0 版本，
+# 它支持同一屏多个玻璃实例（QWEA0 那个进程级共享取景，两个实例必崩）。
+backdrop = { group = "io.github.kyant0", name = "backdrop-android", version.ref = "backdrop" }
+compose-ui = { group = "androidx.compose.ui", name = "ui", version.ref = "composeUi" }
+compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "composeUi" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
