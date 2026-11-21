@@ -46,7 +46,7 @@
                     android:layout_height="30dp"
                     android:contentDescription="@null"
                     android:src="@drawable/ic_launcher_foreground"
-                    app:tint="@null" />
+                    app:tint="?attr/colorTextPrimary" />
 
                 <TextView
                     android:layout_width="0dp"

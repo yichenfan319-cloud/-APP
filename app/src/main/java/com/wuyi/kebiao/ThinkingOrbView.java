@@ -76,7 +76,11 @@ public class ThinkingOrbView extends View {
     private final float[] fleeVY = new float[DOT_COUNT];
 
     // ---- 主题色 ----
+    // 默认为白色在浅色主题下等于隐身（白点画在白卡片上），
+    // 所以这里不写死颜色，改成从 ?attr/colorTextPrimary 解析；
+    // 只有调用 setInkColor() 显式指定后，才不再跟随主题。
     private int inkColor = Color.WHITE;
+    private boolean inkFromTheme = true;
     private int doneColor = 0xFF2E9E5B;
     private int errorColor = 0xFFE5484D;
 
@@ -100,7 +104,25 @@ public class ThinkingOrbView extends View {
 
         buildSpheres();
         paint.setStyle(Paint.Style.FILL);
+        resolveThemeInk();
         paint.setColor(inkColor);
+    }
+
+    /**
+     * 把点的颜色对到主题的正文色。
+     * 主题切换（日夜模式）会重建 Activity，所以这里重新解析一次是安全的；
+     * 一旦外面调过 setInkColor()，就以显式指定的为准。
+     */
+    private void resolveThemeInk() {
+        if (!inkFromTheme) return;
+        int c = com.google.android.material.color.MaterialColors.getColor(
+                this, R.attr.colorTextPrimary, Color.WHITE);
+        if (c != inkColor) {
+            inkColor = c;
+            paint.setColor(inkColor);
+            invalidate();
+        }
+
     }
 
     /**
@@ -165,6 +187,8 @@ public class ThinkingOrbView extends View {
     /** 正常状态的点色，默认跟随主题文字色。 */
     public void setInkColor(int color) {
         this.inkColor = color;
+        this.inkFromTheme = false;   // 显式指定后不再被主题覆盖
+        paint.setColor(inkColor);
         invalidate();
     }
 
@@ -419,6 +443,8 @@ public class ThinkingOrbView extends View {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         startAt = SystemClock.uptimeMillis();
+        // 挂到窗口后主题一定已确定，再解析一次点色
+        resolveThemeInk();
     }
 
     // ------------------------------------------------------------------

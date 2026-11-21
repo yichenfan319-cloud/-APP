@@ -164,9 +164,7 @@ private fun GlassNavBar(controller: GlassNavController, palette: NavPalette) {
                     .background(Color(palette.barColor), RoundedCornerShape(barH / 2))
                     .border(
                         width = 1.dp,
-                        brush = Brush.verticalGradient(
-                            listOf(Color(palette.rimTop), Color(0x14FFFFFF), Color(0x08FFFFFF))
-                        ),
+                        brush = Brush.verticalGradient(rimShades(palette.rimTop)),
                         shape = RoundedCornerShape(barH / 2)
                     )
                     .onGloballyPositioned { barWidthPx = it.size.width.toFloat() },
@@ -254,9 +252,7 @@ private fun GlassNavBar(controller: GlassNavController, palette: NavPalette) {
                         .background(Color(0x14FFFFFF), AbsoluteRoundedCornerShape(lensH / 2))
                         .border(
                             width = 1.dp,
-                            brush = Brush.verticalGradient(
-                                listOf(Color(0x33FFFFFF), Color(0x14FFFFFF), Color(0x08FFFFFF))
-                            ),
+                            brush = Brush.verticalGradient(rimShades(palette.rimTop)),
                             shape = AbsoluteRoundedCornerShape(lensH / 2)
                         )
                 )
@@ -354,4 +350,20 @@ private fun DrawScope.drawTabIcon(index: Int, color: Color) {
             )
         }
     }
+}
+
+/**
+ * 把描边基色按 alpha 递减，做成"上实下虚"的受光边。
+ *
+ * 之前三档颜色写死成白色（0x33/0x14/0x08FFFFFF），深色底好看，
+ * 但浅色主题下白压白等于没画。改成从基色派生：深色主题传白、
+ * 浅色主题传深灰，形状保持一致。
+ */
+private fun rimShades(base: Int): List<Color> {
+    val baseAlpha = (base ushr 24) and 0xFF
+    val r = ((base shr 16) and 0xFF) / 255f
+    val g = ((base shr 8) and 0xFF) / 255f
+    val b = (base and 0xFF) / 255f
+    fun shade(f: Float) = Color(r, g, b, (baseAlpha * f) / 255f)
+    return listOf(shade(1f), shade(0.35f), shade(0.12f))
 }

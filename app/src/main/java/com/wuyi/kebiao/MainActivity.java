@@ -100,7 +100,14 @@ public class MainActivity extends AppCompatActivity {
         // 90% 不透明：既能透出一点底下内容，又不会让图标文字糊掉
         int barColor = (bar & 0x00FFFFFF) | 0xE6000000;
 
-        NavPalette palette = new NavPalette(selected, normal, barColor, 0x4DFFFFFF);
+        // 描边高光要跟底色反着来：深色底用白边才显得"受光"，
+        // 浅色底用白边等于没画（白压白），换成一道深色细线才有轮廓。
+        boolean night = (getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        int rimColor = night ? 0x4DFFFFFF : 0x33000000;
+
+        NavPalette palette = new NavPalette(selected, normal, barColor, rimColor);
 
         navController = new GlassNavController(labels, page -> {
             showPage(page);
