@@ -15,11 +15,14 @@
     android:layout_height="match_parent"
     android:background="?attr/colorSurfaceScreen">
 
-    <!-- 三个页面都塞在这里，用 show/hide 切换，不重建 -->
+    <!-- 三个页面都塞在这里，用 show/hide 切换，不重建。
+         底色必须给：页面自己的根布局多为 ScrollView（透明），
+         万一有 Fragment 没被正确 hide，没底色就会把上一页透出来。 -->
     <FrameLayout
         android:id="@+id/page_container"
         android:layout_width="match_parent"
-        android:layout_height="match_parent" />
+        android:layout_height="match_parent"
+        android:background="?attr/colorSurfaceScreen" />
 
     <!-- 隐藏的 WebView 挂在这儿：尺寸为 0，用户看不到，只用来过单点登录 -->
     <FrameLayout

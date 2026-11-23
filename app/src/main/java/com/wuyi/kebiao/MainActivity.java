@@ -28,6 +28,11 @@ public class MainActivity extends AppCompatActivity {
     private static final int PAGE_WEEK = 1;
     private static final int PAGE_ACCOUNT = 2;
 
+    /** Fragment 的 tag 前缀，重建时靠它把页面捡回来（不要改，改了会让热更新后错位）。 */
+    private static final String TAG_PAGE = "page";
+
+    private static final String KEY_PAGE = "kip_current_page";
+
     private final Fragment[] pages = new Fragment[3];
     private int currentPage = PAGE_TODAY;
 
@@ -41,8 +46,20 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         SystemBars.apply(this);
+
+        // 切白天/黑夜会让 Activity 重建（uiMode 变化）。重建时 FragmentManager 会把
+        // 之前 add() 过的三个页面原样恢复，如果这里再 new 一遍就会叠出两套 Fragment：
+        // 新的盖在上面，旧的那套仍可见 —— 表现就是"切页之后上一页的内容还留在下面"。
+        // 所以有 savedInstanceState 时按 tag 把旧的捡回来，别再新建。
+        if (savedInstanceState != null) {
+            currentPage = savedInstanceState.getInt(KEY_PAGE, PAGE_TODAY);
+            for (int i = 0; i < pages.length; i++) {
+                pages[i] = getSupportFragmentManager().findFragmentByTag(TAG_PAGE + i);
+            }
+        }
+
         setupNav();
-        showPage(PAGE_TODAY);
+        showPage(currentPage);
 
         engine = new ScheduleEngine(this, new ScheduleEngine.Callback() {
             @Override
@@ -129,7 +146,7 @@ public class MainActivity extends AppCompatActivity {
                 if (f == null) {
                     f = createPage(i);
                     pages[i] = f;
-                    tx.add(R.id.page_container, f, "page" + i);
+                    tx.add(R.id.page_container, f, TAG_PAGE + i);
                 } else {
                     tx.show(f);
                 }
@@ -158,6 +175,12 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean glassOn() {
         return Prefs.get(this).getBoolean(Prefs.KEY_GLASS, true);
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putInt(KEY_PAGE, currentPage);
     }
 
     @Override

@@ -3,6 +3,21 @@
 格式参照 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 `主版本.次版本.修订号-阶段`。
 
+## [2.1.8-beta] - 2026-11-23
+
+修切换白天/黑夜后页面残留。
+
+### 修复
+
+- 切换系统深浅色会让 Activity 重建。重建时 FragmentManager 会把之前 add 过的
+  三个页面恢复回来，而 `onCreate` 又无条件 `new` 了一遍并 `showPage(本日)`，
+  于是同一个页面在容器里出现两份：新的盖在上面，旧的那套仍然可见。
+  账号页的上半部分是不透明卡片、下半部分是透明背景，旧「本日」的课程卡片就从
+  下面透出来了。
+  现在有 `savedInstanceState` 时按 tag 把已有页面捡回来复用，并把当前页存进
+  `onSaveInstanceState`，重建后停在原来那一页。
+- `page_container` 补了不透明底色：页面根布局多是 ScrollView（透明），
+  万一将来还有 Fragment 没被正确 hide，也不会把上一页透出来。
 ## [2.1.7-beta] - 2026-11-23
 
 修「课表显示到错的那一天」。
