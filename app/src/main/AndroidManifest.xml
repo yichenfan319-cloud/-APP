@@ -47,6 +47,18 @@
             android:name=".WeekViewActivity"
             android:exported="false" />
 
+        <!-- 把 cache/logs/ 下的诊断日志以 content:// 形式交给邮件客户端。
+             不用 file:// 是因为 Android 7 起禁止跨应用传 file URI（FileUriExposedException）。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
     </application>
 
 </manifest>

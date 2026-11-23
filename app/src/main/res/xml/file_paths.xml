@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider 的可见范围：只暴露 cache/logs/ 这一个目录，
+  也就是 LogExporter 写诊断日志的地方，避免把整个应用数据目录开出去。
+-->
+<paths>
+    <cache-path
+        name="logs"
+        path="logs/" />
+</paths>

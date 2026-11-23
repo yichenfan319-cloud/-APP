@@ -12,12 +12,14 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.FileProvider;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.materialswitch.MaterialSwitch;
 
 import org.json.JSONObject;
 
+import java.io.File;
 import java.io.IOException;
 
 import okhttp3.Call;
@@ -147,17 +149,46 @@ public class ProfileFragment extends Fragment {
     }
 
     private void sendFeedbackEmail() {
-        Intent intent = new Intent(Intent.ACTION_SENDTO);
-        intent.setData(Uri.parse("mailto:" + FEEDBACK_EMAIL));
-        intent.putExtra(Intent.EXTRA_SUBJECT, "武夷学院课表 App 反馈");
-        intent.putExtra(Intent.EXTRA_TEXT, "\n\n\n\n---\nApp版本: v"
-                + VersionChecker.currentVersionName(requireContext())
-                + "\n设备: " + android.os.Build.MODEL);
+        // 先把诊断日志导出来当附件，再拉起邮件客户端。
+        // 用户在手机上没法提供 logcat，没有附件的话反馈基本只能靠猜。
+        File logFile = null;
+        try {
+            logFile = LogExporter.export(requireContext());
+        } catch (Exception ignored) {
+            // 导出失败也让用户能把反馈发出去，只是没附件
+        }
+
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_EMAIL, new String[]{FEEDBACK_EMAIL});
+        intent.putExtra(Intent.EXTRA_SUBJECT, "KipKip 问题反馈");
+        intent.putExtra(Intent.EXTRA_TEXT,
+                "（请在这上面描述你遇到的问题，比如哪门课、哪一天显示不对）\n\n\n"
+                        + "--- 以下由 App 自动填写 ---\n"
+                        + "App 版本: v" + VersionChecker.currentVersionName(requireContext()) + "\n"
+                        + "设备: " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL
+                        + " / Android " + android.os.Build.VERSION.RELEASE + "\n"
+                        + "诊断日志: " + (logFile == null
+                        ? "导出失败，未附上"
+                        : "已作为附件，共 " + DiagLog.size() + " 行"));
+
+        if (logFile != null) {
+            try {
+                Uri uri = FileProvider.getUriForFile(requireContext(),
+                        requireContext().getPackageName() + ".fileprovider", logFile);
+                intent.putExtra(Intent.EXTRA_STREAM, uri);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (Exception ignored) {
+                // FileProvider 没配好时退化成纯文本邮件，不影响反馈
+            }
+        }
 
         try {
-            startActivity(Intent.createChooser(intent, "选择邮箱应用"));
+            startActivity(Intent.createChooser(intent, "发送反馈"));
         } catch (Exception e) {
-            Toast.makeText(requireContext(), "未找到邮箱应用，请手动发送邮件至 " + FEEDBACK_EMAIL, Toast.LENGTH_LONG).show();
+            String where = logFile == null ? "（导出失败）" : logFile.getAbsolutePath();
+            Toast.makeText(requireContext(),
+                    "没有找到可用的邮件应用，日志已保存到：" + where, Toast.LENGTH_LONG).show();
         }
     }
 

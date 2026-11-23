@@ -18,8 +18,8 @@ android {
         // 21~23（Android 5~6）在这个年代已基本绝迹，提到 24 换取真实的折射玻璃。
         minSdk = 24
         targetSdk = 34
-        versionCode = 19
-        versionName = "2.1.8-beta"
+        versionCode = 20
+        versionName = "2.1.9-beta"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

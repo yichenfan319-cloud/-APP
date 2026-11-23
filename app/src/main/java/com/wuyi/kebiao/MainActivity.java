@@ -78,11 +78,14 @@ public class MainActivity extends AppCompatActivity {
                 // 用 Log.i 而不是 Log.d：release 包上 Log.d 常被裁掉/不输出，
                 // 之前排查"课表显示错天"时就因为这条日志看不见而多绕了一圈。
                 android.util.Log.i("KipKip", message);
+                // 同时留一份在内存里，设置页「问题反馈」能一键导出带走
+                DiagLog.add(message);
             }
 
             @Override
             public void onError(String message) {
                 android.util.Log.w("KipKip", message);
+                DiagLog.add("错误: " + message);
             }
         });
         engine.attach(findViewById(R.id.engine_host));
@@ -98,6 +101,12 @@ public class MainActivity extends AppCompatActivity {
 
         getWindow().getDecorView().postDelayed(
                 () -> VersionChecker.autoCheck(MainActivity.this), 1500);
+
+        boolean nightNow = (getResources().getConfiguration().uiMode
+                & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                == android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        DiagLog.add("主界面已创建（" + VersionChecker.currentVersionName(this)
+                + (nightNow ? "，深色" : "，浅色") + "）");
     }
 
     // ------------------------------------------------------------ 导航
