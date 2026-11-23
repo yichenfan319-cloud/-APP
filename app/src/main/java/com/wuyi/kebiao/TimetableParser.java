@@ -24,7 +24,7 @@ import java.util.regex.Pattern;
  *       把"哪一周的哪一天是几月几号"算好了，客户端不需要再做任何跨周推算；</li>
  *   <li>旧实现用 {@code tds[dayIdx]} 直接按下标取列，遇到 {@code rowspan} 会把
  *       后面所有列整体左移，导致"周五的课显示成周四"。本类用列指针
- *       {@code col += rowspan} 跟踪，从根上避免这个问题。</li>
+ *       {@code rowspan} / {@code colspan} 按"逐列占用"跟踪，从根上避免这个问题。</li>
  * </ul>
  *
  * <p><b>节次以文本为准，不以 rowspan 为准</b>：真实数据里存在
@@ -256,6 +256,12 @@ public final class TimetableParser {
 
     private static void parseCourses(Element table, Result result) {
         Elements rows = table.select("tr");
+
+        // 列占用表：occupy[c] > 0 表示第 c 列在当前行仍被上面某一行的 rowspan 占着。
+        // rowspan 会吃掉下一行的那个 <td>（真实数据里 5 行表的第 4 行就只有 7 个 td），
+        // 所以必须按"逐列占用"来推列号，不能靠"数第几个 td"。
+        int[] occupy = new int[16];
+
         for (Element tr : rows) {
             // 跳过表头行：表头里的 td 不存在，但保险起见按父节点判断
             Element parent = tr.parent();
@@ -282,8 +288,17 @@ public final class TimetableParser {
                     continue;
                 }
 
+                // 跳过被上面 rowspan 占住的列
+                while (col < occupy.length && occupy[col] > 0) {
+                    col++;
+                }
+                if (col >= occupy.length) {
+                    break;
+                }
+
                 int rowspan = parseSpan(td.attr("rowspan"));
-                int dayIndex = col; // 第 0 列是节次标签列，所以 dayIndex 从 1 开始对齐 days[dayIndex-1]
+                int colspan = parseSpan(td.attr("colspan"));
+                int dayIndex = col;
 
                 for (Element li : td.select("li.courselists-item")) {
                     Course course = parseCourse(li, rowLabel);
@@ -307,7 +322,20 @@ public final class TimetableParser {
 
                     result.courses.add(course);
                 }
-                col += rowspan;
+
+                // 记下这一格占用的列，以及它在下面 rowspan-1 行里继续占着
+                for (int k = 0; k < colspan && col + k < occupy.length; k++) {
+                    occupy[col + k] = Math.max(occupy[col + k], rowspan);
+                }
+                // 列号按 colspan 前进（不是 rowspan —— 那是行方向的跨度）
+                col += Math.max(1, colspan);
+            }
+
+            // 这一行处理完，所有占用计数减一；下一行里 >0 的列要跳过
+            for (int i = 0; i < occupy.length; i++) {
+                if (occupy[i] > 0) {
+                    occupy[i]--;
+                }
             }
         }
     }

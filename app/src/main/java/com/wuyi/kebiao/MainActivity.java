@@ -57,8 +57,10 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onLog(String message) {
-                // 新界面没有日志区了，日志留给 logcat
-                android.util.Log.d("KipKip", message);
+                // 新界面没有日志区了，日志留给 logcat。
+                // 用 Log.i 而不是 Log.d：release 包上 Log.d 常被裁掉/不输出，
+                // 之前排查"课表显示错天"时就因为这条日志看不见而多绕了一圈。
+                android.util.Log.i("KipKip", message);
             }
 
             @Override
