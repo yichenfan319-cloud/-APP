@@ -180,6 +180,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /** 周次页切到没取过的那一周时，让引擎去要那一周的真实课表。 */
+    public void loadWeek(int week) {
+        if (engine != null) {
+            engine.loadWeek(week);
+        }
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();

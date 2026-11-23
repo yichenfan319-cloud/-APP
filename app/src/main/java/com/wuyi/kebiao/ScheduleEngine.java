@@ -14,6 +14,7 @@ import android.webkit.WebViewClient;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
+import java.util.List;
 
 /**
  * 取数引擎：一张隐藏 WebView 只用来过单点登录，拿到 Cookie 之后就走 HTTP 直连。
@@ -120,6 +121,28 @@ public final class ScheduleEngine {
         tryDirectFetch(this::webViewLogin);
     }
 
+    /** 单独加载某一周（周次页切到没取过的周时调用）。 */
+    public void loadWeek(int week) {
+        final String cookie = collectCookies();
+        if (cookie.isEmpty()) {
+            cb.onError("登录已失效，请回到本日页刷新一次");
+            return;
+        }
+        cb.onLog("正在获取第 " + week + " 周课表…");
+        new Thread(() -> {
+            try {
+                final List<TimetableParser.Course> courses =
+                        TimetableRepository.fetchWeek(cookie, week, null);
+                main.post(() -> {
+                    ScheduleStore.get().putWeek(week, courses);
+                    cb.onLog("第 " + week + " 周：" + courses.size() + " 门课程");
+                });
+            } catch (IOException e) {
+                main.post(() -> cb.onError("第 " + week + " 周获取失败：" + e.getMessage()));
+            }
+        }, "timetable-week").start();
+    }
+
     private void beginSearching(String detail) {
         running = true;
         injectedLogin = false;
@@ -164,8 +187,9 @@ public final class ScheduleEngine {
             running = false;
             main.removeCallbacks(timeout);
             cb.onSnapshot(snap);
+            int n = snap.currentWeekCourses != null ? snap.currentWeekCourses.size() : 0;
             cb.onState(ThinkingOrbView.State.DONE,
-                    "第 " + snap.currentWeek + " 周 · 共 " + snap.courses.size() + " 门课");
+                    "第 " + snap.currentWeek + " 周 · 本周 " + n + " 门课");
         });
     }
 

@@ -3,8 +3,10 @@ package com.wuyi.kebiao;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
@@ -64,27 +66,69 @@ public final class TimetableRepository {
     // ================================================================ 快照
 
     /**
-     * 学期快照：全部课程 + 第一周周一 + 当前周。
-     * 拿到它之后，任何一天的课都可以本地算出来，不需要再联网。
+     * 课表快照：第一周周一、当前周、已取过的各周课程。
+     *
+     * <p><b>取数原则</b>：每一周都以服务端"该周视图"（{@code zc=周次}）为准，
+     * 因为调课、停课这些临时变动只体现在周视图里。周视图就是教务系统页面
+     * 显示给学生的内容 —— 那边显示什么，这里就显示什么。
+     *
+     * <p>{@link #courses} 只在"周视图取不到"时作为兜底，用周次区间本地推算，
+     * 正常路径下它是 null。
      */
     public static final class Snapshot {
-        /** 全部课程（已按"全部"视图解析）。 */
+        /**
+         * 学期全部课程 —— <b>仅兜底用</b>。正常路径（周视图成功）下为 null，
+         * 因为推算出来的结果不含调课，不能当主数据。
+         */
         public final List<TimetableParser.Course> courses;
-        /** 服务端表头给出的当前周七天（带日期）。 */
+        /** 当前周视图里的课程（服务端按 {@code zc=当前周} 过滤后返回）。 */
+        public final List<TimetableParser.Course> currentWeekCourses;
+        /** 当前周七天（带日期）。 */
         public final List<TimetableParser.Day> currentWeekDays;
         /** 第一周周一的 00:00 毫秒时间戳。 */
         public final long firstMonday;
-        /** 服务端表头对应的周次。 */
+        /** 当前是第几周。 */
         public final int currentWeek;
+        /** 已取过的周 → 课程。会话内缓存，切回看过的周不重复请求。 */
+        private final Map<Integer, List<TimetableParser.Course>> weekCache = new HashMap<>();
 
         Snapshot(List<TimetableParser.Course> courses,
                  List<TimetableParser.Day> currentWeekDays,
                  long firstMonday,
                  int currentWeek) {
+            this(courses, null, currentWeekDays, firstMonday, currentWeek);
+        }
+
+        Snapshot(List<TimetableParser.Course> courses,
+                 List<TimetableParser.Course> currentWeekCourses,
+                 List<TimetableParser.Day> currentWeekDays,
+                 long firstMonday,
+                 int currentWeek) {
             this.courses = courses;
+            this.currentWeekCourses = currentWeekCourses;
             this.currentWeekDays = currentWeekDays;
             this.firstMonday = firstMonday;
             this.currentWeek = currentWeek;
+            if (currentWeekCourses != null) {
+                weekCache.put(currentWeek, currentWeekCourses);
+            }
+        }
+
+        /** 当前周是否来自服务端周视图（false 表示是兜底推算）。 */
+        public boolean currentWeekFromServer() {
+            return currentWeekCourses != null;
+        }
+
+        /** 某一周的课程是否已经取过。 */
+        public boolean hasWeek(int week) {
+            return weekCache.containsKey(week);
+        }
+
+        /** 记下某一周的真实课表（由引擎联网取回后调用）。 */
+        public void putWeek(int week, List<TimetableParser.Course> weekCourses) {
+            if (weekCourses != null) {
+                weekCache.put(week, weekCourses);
+            }
         }
 
         /** 某日期属于第几周（1 起）。早于第一周返回 <= 0。 */
@@ -111,8 +155,50 @@ public final class TimetableRepository {
             if (week <= 0) {
                 return out;
             }
+            List<TimetableParser.Course> pool = weekCache.get(week);
+            boolean fromServer = pool != null;
+            if (pool == null) {
+                // 这一周还没取过，只能用兜底数据推算（正常路径不会走到这里）
+                pool = courses;
+            }
+            if (pool == null) {
+                return out;
+            }
+            for (TimetableParser.Course c : pool) {
+                if (c.dayIndex != day) {
+                    continue;
+                }
+                // 周视图已经按周筛过，兜底数据还要自己判一次周次
+                if (!fromServer && c.weeks != null && !c.weeks.contains(week)) {
+                    continue;
+                }
+                out.add(c);
+            }
+            sortBySection(out);
+            return out;
+        }
+
+        /**
+         * 指定周的课程（供周课表用）。
+         * 取过该周就用真实周视图；没取过则退回兜底推算（可能不含调课）。
+         * 调用前先用 {@link #hasWeek(int)} 判断要不要联网。
+         */
+        public List<TimetableParser.Course> coursesInWeek(int week) {
+            List<TimetableParser.Course> cached = weekCache.get(week);
+            if (cached != null) {
+                List<TimetableParser.Course> out = new ArrayList<>(cached);
+                sortBySection(out);
+                return out;
+            }
+            List<TimetableParser.Course> out = new ArrayList<>();
+            if (courses == null) {
+                return out;
+            }
             for (TimetableParser.Course c : courses) {
-                if (c.dayIndex == day && c.weeks.contains(week)) {
+                boolean hit = c.weeks != null
+                        ? c.weeks.contains(week)
+                        : TimetableParser.matchesWeek(c.weekText, week);
+                if (hit) {
                     out.add(c);
                 }
             }
@@ -194,38 +280,86 @@ public final class TimetableRepository {
             log.log("学期第一周周一：" + formatDate(firstMonday));
         }
 
-        // ---- 第二步：拿全部课程 ----
-        String allHtml = get(client, cookie, "");
-        TimetableParser.Result all = TimetableParser.parse(allHtml);
-        if (all.courses.isEmpty()) {
-            throw new IOException("课表为空，可能登录已失效");
-        }
-
-        // 表头日期 = 当前周，用它反推当前周次
+        // ---- 第二步：先算出当前周 ----
         long today = System.currentTimeMillis();
-        int currentWeek = -1;
-        for (TimetableParser.Day d : all.days) {
-            long ms = resolveDate(d.date, today);
-            if (ms == Long.MIN_VALUE) {
-                continue;
-            }
-            int w = (int) Math.floor((startOfDay(ms) - firstMonday) / (double) (7L * DAY_MS)) + 1;
-            if (w > 0) {
-                currentWeek = w;
-                break;
-            }
-        }
+        int currentWeek = (int) Math.floor(
+                (startOfDay(today) - firstMonday) / (double) (7L * DAY_MS)) + 1;
         if (currentWeek <= 0) {
-            currentWeek = (int) Math.floor((startOfDay(today) - firstMonday) / (double) (7L * DAY_MS)) + 1;
+            currentWeek = 1;
         }
 
-        if (log != null) {
-            log.log("共解析 " + all.courses.size() + " 门课程，当前第 " + currentWeek + " 周");
-            for (String w : all.warnings) {
-                log.log("注意：" + w);
+        // ---- 第三步：取当前周的"真实周视图" ----
+        // 这是主数据来源：教务系统页面上显示什么，这里就是什么，调课/停课都带着。
+        List<TimetableParser.Course> weekCourses = null;
+        List<TimetableParser.Day> days = null;
+        try {
+            TimetableParser.Result rw = TimetableParser.parse(
+                    get(client, cookie, String.valueOf(currentWeek)));
+            if (rw.hasDays()) {
+                weekCourses = rw.courses;
+                days = rw.days;
+                if (log != null) {
+                    log.log("第 " + currentWeek + " 周（周视图）：" + weekCourses.size() + " 门课程");
+                }
+                for (String w : rw.warnings) {
+                    log.log("注意：" + w);
+                }
+            } else if (log != null) {
+                log.log("第 " + currentWeek + " 周视图没有表头，改用学期视图兜底");
+            }
+        } catch (IOException e) {
+            if (log != null) {
+                log.log("第 " + currentWeek + " 周视图获取失败，改用学期视图兜底：" + e.getMessage());
             }
         }
-        return new Snapshot(all.courses, all.days, firstMonday, currentWeek);
+
+        // ---- 兜底：周视图拿不到时才取"全部"视图，用周次区间本地推算 ----
+        // 注意：推算结果不含调课，只在万不得已时用。
+        List<TimetableParser.Course> semester = null;
+        if (weekCourses == null) {
+            TimetableParser.Result all = TimetableParser.parse(get(client, cookie, ""));
+            if (all.courses.isEmpty()) {
+                throw new IOException("课表为空，可能登录已失效");
+            }
+            semester = all.courses;
+            if (days == null) {
+                days = all.days;
+            }
+            if (log != null) {
+                log.log("已用学期视图兜底：" + semester.size() + " 门课程（可能不含调课）");
+                for (String w : all.warnings) {
+                    log.log("注意：" + w);
+                }
+            }
+        }
+
+        return new Snapshot(semester, weekCourses, days, firstMonday, currentWeek);
+    }
+
+    /**
+     * 单独取某一周的课表（周次页切到没取过的周时用）。
+     * 返回的课程就是教务系统该周页面的内容。
+     */
+    public static List<TimetableParser.Course> fetchWeek(String cookie, int week, Logger log)
+            throws IOException {
+        OkHttpClient client = newClient();
+        if (log != null) {
+            log.log("正在获取第 " + week + " 周课表…");
+        }
+        TimetableParser.Result r = TimetableParser.parse(
+                get(client, cookie, String.valueOf(week)));
+        if (!r.hasDays()) {
+            throw new IOException("第 " + week + " 周没有返回课表（可能登录已失效）");
+        }
+        return r.courses;
+    }
+
+    private static OkHttpClient newClient() {
+        return new OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(25, TimeUnit.SECONDS)
+                .followRedirects(true)
+                .build();
     }
 
     private static String get(OkHttpClient client, String cookie, String zc) throws IOException {

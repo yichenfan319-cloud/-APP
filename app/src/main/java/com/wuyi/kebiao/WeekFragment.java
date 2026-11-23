@@ -29,6 +29,8 @@ public class WeekFragment extends Fragment implements ScheduleStore.Listener {
     private TextView currentWeekView;
     private TextView pickWeekView;
     private TimetableGridView grid;
+    /** 正在联网请求的那一周，避免每帧重复发请求。 */
+    private int requestingWeek = -1;
 
     @Nullable
     @Override
@@ -79,21 +81,27 @@ public class WeekFragment extends Fragment implements ScheduleStore.Listener {
         int week = store.getViewingWeek();
         currentWeekView.setText(getString(R.string.week_value, snap.currentWeek));
         pickWeekView.setText(getString(R.string.week_value, week));
+
+        // 每一周都以教务系统该周的真实课表为准。没取过就联网取一次，
+        // 取回来会经 ScheduleStore 回调本方法重新渲染。
+        if (!store.hasWeek(week) && requestingWeek != week) {
+            requestingWeek = week;
+            grid.setCourses(new ArrayList<>());
+            pickWeekView.setText(getString(R.string.week_value, week) + " · 加载中…");
+            if (getActivity() instanceof MainActivity) {
+                ((MainActivity) getActivity()).loadWeek(week);
+            }
+            return;
+        }
         grid.setCourses(coursesIn(snap, week));
     }
 
-    /** 把"某一周该上的课"挑出来。周次判断全交给解析层，这里不重复实现规则。 */
+    /**
+     * 把"某一周该上的课"挑出来。
+     * 取过该周就用真实周视图（含调课），没取过才退回推算 —— 规则都在解析层。
+     */
     private List<TimetableParser.Course> coursesIn(TimetableRepository.Snapshot snap, int week) {
-        List<TimetableParser.Course> out = new ArrayList<>();
-        for (TimetableParser.Course c : snap.courses) {
-            boolean hit = c.weeks != null
-                    ? c.weeks.contains(week)
-                    : TimetableParser.matchesWeek(c.weekText, week);
-            if (hit) {
-                out.add(c);
-            }
-        }
-        return out;
+        return snap.coursesInWeek(week);
     }
 
     private void showWeekPicker() {
@@ -106,6 +114,7 @@ public class WeekFragment extends Fragment implements ScheduleStore.Listener {
         new MaterialAlertDialogBuilder(requireContext())
                 .setTitle(R.string.week_picker_title)
                 .setSingleChoiceItems(labels, Math.max(0, current - 1), (dialog, which) -> {
+                    requestingWeek = -1;
                     ScheduleStore.get().setViewingWeek(which + 1);
                     dialog.dismiss();
                 })

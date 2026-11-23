@@ -90,4 +90,18 @@ public final class ScheduleStore {
         return snapshot == null ? java.util.Collections.<TimetableParser.Course>emptyList()
                 : snapshot.coursesOn(date);
     }
+
+    /** 记下引擎刚取回的某一周真实课表，并通知界面重绘。 */
+    public void putWeek(int week, List<TimetableParser.Course> courses) {
+        if (snapshot == null) {
+            return;
+        }
+        snapshot.putWeek(week, courses);
+        notifyChanged();
+    }
+
+    /** 某一周是否已经取过（没取过就要联网）。 */
+    public boolean hasWeek(int week) {
+        return snapshot != null && snapshot.hasWeek(week);
+    }
 }
